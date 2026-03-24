@@ -14,7 +14,7 @@
 # limitations under the License.
 
 __version__ = None
-exec(open("../../gsplat/version.py", "r").read())
+exec(open("../../gsplat/version.py").read())
 
 # -- Project information
 

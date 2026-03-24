@@ -22,16 +22,14 @@ pytest <THIS_PY_FILE> -s
 ```
 """
 
-from itertools import product, chain
-from typing import Optional, Tuple
+from itertools import chain, product
 
+import gsplat
 import pytest
 import torch
-import gsplat
-
-from tests.test_cameras import parse_lidar_camera
-from gsplat.rendering import RenderMode
 from gsplat.cuda._constants import ALPHA_THRESHOLD
+from gsplat.rendering import RenderMode
+from tests.test_cameras import parse_lidar_camera
 
 device = torch.device("cuda:0")
 
@@ -47,11 +45,11 @@ device = torch.device("cuda:0")
             marks=[
                 # test based on with_eval3d (5)  and with_ut (6)
                 pytest.mark.skipif(
-                    (params[5] == True or params[6] == True) and not gsplat.has_3dgut(),
+                    (params[5] or params[6]) and not gsplat.has_3dgut(),
                     reason="3DGUT support isn't built in",
                 ),
                 pytest.mark.skipif(
-                    (params[5] == False or params[6] == False) and not gsplat.has_3dgs(),
+                    (not params[5] or not params[6]) and not gsplat.has_3dgs(),
                     reason="3DGS support isn't built in",
                 ),
             ],
@@ -99,21 +97,24 @@ device = torch.device("cuda:0")
                 [True],  # with_eval3d
                 [True],  # with_ut
                 ["pinhole"],  # camera_model
-                [None, (None, 20)],  # extra_signals_info — (None,20) triggers padding
+                [
+                    None,
+                    (None, 20),
+                ],  # extra_signals_info — (None,20) triggers padding
             ),
         )
     ],
 )
 def test_rasterization(
     per_view_color: bool,
-    sh_degree: Optional[int],
+    sh_degree: int | None,
     render_mode: RenderMode,
     packed: bool,
-    batch_dims: Tuple[int, ...],
+    batch_dims: tuple[int, ...],
     with_eval3d: bool,
     with_ut: bool,
     camera_model: str,
-    extra_signals_info: Optional[tuple],
+    extra_signals_info: tuple | None,
 ):
     from gsplat.rendering import _rasterization, rasterization
 
@@ -135,7 +136,9 @@ def test_rasterization(
         if sh_degree is None:
             colors = torch.rand(batch_dims + (N, 3), device=device)
         else:
-            colors = torch.rand(batch_dims + (N, (sh_degree + 1) ** 2, 3), device=device)
+            colors = torch.rand(
+                batch_dims + (N, (sh_degree + 1) ** 2, 3), device=device
+            )
 
     if extra_signals_info is None:
         extra_signals_sh_degree = None
@@ -152,7 +155,12 @@ def test_rasterization(
             else:
                 extra_signals = torch.rand(
                     batch_dims
-                    + (C, N, (extra_signals_sh_degree + 1) ** 2, extra_signals_size),
+                    + (
+                        C,
+                        N,
+                        (extra_signals_sh_degree + 1) ** 2,
+                        extra_signals_size,
+                    ),
                     device=device,
                 )
         else:
@@ -163,13 +171,19 @@ def test_rasterization(
             else:
                 extra_signals = torch.rand(
                     batch_dims
-                    + (N, (extra_signals_sh_degree + 1) ** 2, extra_signals_size),
+                    + (
+                        N,
+                        (extra_signals_sh_degree + 1) ** 2,
+                        extra_signals_size,
+                    ),
                     device=device,
                 )
 
     if camera_model == "lidar":
         params = parse_lidar_camera("at128", batch_dims, 0, 0, device=device)
-        lidar = gsplat.RowOffsetStructuredSpinningLidarModelParametersExt(**params)
+        lidar = gsplat.RowOffsetStructuredSpinningLidarModelParametersExt(
+            **params
+        )
         width = lidar.n_rows
         height = lidar.n_columns
         focal = width
@@ -179,7 +193,11 @@ def test_rasterization(
         lidar = None
 
     Ks = torch.tensor(
-        [[focal, 0.0, width / 2.0], [0.0, focal, height / 2.0], [0.0, 0.0, 1.0]],
+        [
+            [focal, 0.0, width / 2.0],
+            [0.0, focal, height / 2.0],
+            [0.0, 0.0, 1.0],
+        ],
         device=device,
     ).expand(batch_dims + (C, -1, -1))
     viewmats = torch.eye(4, device=device).expand(batch_dims + (C, -1, -1))

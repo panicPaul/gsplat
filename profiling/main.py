@@ -22,10 +22,10 @@ pytest <THIS_PY_FILE>
 """
 
 import time
+from collections.abc import Callable
+from typing import Literal
 
 import torch
-from typing_extensions import Callable, Literal
-
 from gsplat._helper import load_test_data
 from gsplat.distributed import cli
 from gsplat.rendering import rasterization

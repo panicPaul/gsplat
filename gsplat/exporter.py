@@ -13,10 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Export utilities for saving Gaussian splats to various file formats."""
 
 import math
 from io import BytesIO
-from typing import Literal, Optional
+from typing import Literal
 
 import numpy as np
 import torch
@@ -238,7 +239,6 @@ def splat2ply_bytes_compressed(
     Returns:
         bytes: Binary compressed Ply file representing the model.
     """
-
     # Filter the splats with too low opacity
     mask = torch.sigmoid(opacities) > opacity_threshold
     means = means[mask]
@@ -423,7 +423,6 @@ def splat2ply_bytes(
     Returns:
         bytes: Binary Ply file representing the model.
     """
-
     num_splats = means.shape[0]
     buffer = BytesIO()
 
@@ -480,7 +479,6 @@ def splat2splat_bytes(
     Returns:
         bytes: Binary Splat file representing the model.
     """
-
     # Preprocess
     scales = torch.exp(scales)
     sh0_color = sh2rgb(sh0)
@@ -526,10 +524,12 @@ def export_splats(
     sh0: torch.Tensor,
     shN: torch.Tensor,
     format: Literal["ply", "splat", "ply_compressed"] = "ply",
-    save_to: Optional[str] = None,
+    save_to: str | None = None,
 ) -> bytes:
     """Export a Gaussian Splats model to bytes.
+
     The three supported formats are:
+
     - ply: A standard PLY file format. Supported by most viewers.
     - splat: A custom Splat file format. Supported by antimatter15 viewer.
     - ply_compressed: A compressed PLY file format. Used by Supersplat viewer.

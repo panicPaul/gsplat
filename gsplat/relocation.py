@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Tuple
+"""Gaussian relocation utilities for MCMC-based densification."""
 
 from torch import Tensor
 
@@ -25,7 +25,7 @@ def compute_relocation(
     scales: Tensor,  # [N, 3]
     ratios: Tensor,  # [N]
     binoms: Tensor,  # [n_max, n_max]
-) -> Tuple[Tensor, Tensor]:
+) -> tuple[Tensor, Tensor]:
     """Compute new Gaussians from a set of old Gaussians.
 
     This function interprets the Gaussians as samples from a likelihood distribution.
@@ -46,7 +46,6 @@ def compute_relocation(
         **new_opacities**: The opacities of the new Gaussians. [N]
         **new_scales**: The scales of the Gaussians. [N, 3]
     """
-
     N = opacities.shape[0]
     n_max, _ = binoms.shape
     assert scales.shape == (N, 3), scales.shape

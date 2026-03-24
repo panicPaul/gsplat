@@ -14,22 +14,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Pytest configuration and shared fixtures for gsplat tests.
+"""Pytest configuration and shared fixtures for gsplat tests.
 
 This file is automatically discovered by pytest and applies to all test files
 in this directory and subdirectories.
 """
 
+import gc
+
 import pytest
 import torch
-import gc
 
 
 @pytest.fixture(autouse=True)
 def setup_test_environment():
-    """
-    Autouse fixture that runs before every test to ensure:
+    """Autouse fixture that runs before every test to ensure:
     1. Deterministic random seed
     2. CUDA cache is cleared
     3. Garbage collection is performed
@@ -37,7 +36,6 @@ def setup_test_environment():
     This fixture automatically applies to all tests in this directory
     without needing to be explicitly requested.
     """
-
     seed = 42
 
     # Set seed based on test name for reproducibility

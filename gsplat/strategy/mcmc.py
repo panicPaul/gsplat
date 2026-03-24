@@ -13,9 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""MCMC-based densification strategy for Gaussian splatting."""
+
 import math
 from dataclasses import dataclass
-from typing import Any, Dict, Union
+from typing import Any
 
 import torch
 from torch import Tensor
@@ -26,9 +28,9 @@ from .ops import inject_noise_to_position, relocate, sample_add
 
 @dataclass
 class MCMCStrategy(Strategy):
-    """Strategy that follows the paper:
+    """Strategy that follows the MCMC paper.
 
-    `3D Gaussian Splatting as Markov Chain Monte Carlo <https://arxiv.org/abs/2404.09591>`_
+    See `3D Gaussian Splatting as Markov Chain Monte Carlo <https://arxiv.org/abs/2404.09591>`_.
 
     This strategy will:
 
@@ -48,7 +50,6 @@ class MCMCStrategy(Strategy):
         verbose (bool): Whether to print verbose information. Default to False.
 
     Examples:
-
         >>> from gsplat import MCMCStrategy, rasterization
         >>> params: Dict[str, torch.nn.Parameter] | torch.nn.ParameterDict = ...
         >>> optimizers: Dict[str, torch.optim.Optimizer] = ...
@@ -72,7 +73,7 @@ class MCMCStrategy(Strategy):
     min_opacity: float = 0.005
     verbose: bool = False
 
-    def initialize_state(self) -> Dict[str, Any]:
+    def initialize_state(self) -> dict[str, Any]:
         """Initialize and return the running state for this strategy."""
         n_max = 51
         binoms = torch.zeros((n_max, n_max))
@@ -83,8 +84,8 @@ class MCMCStrategy(Strategy):
 
     def check_sanity(
         self,
-        params: Union[Dict[str, torch.nn.Parameter], torch.nn.ParameterDict],
-        optimizers: Dict[str, torch.optim.Optimizer],
+        params: dict[str, torch.nn.Parameter] | torch.nn.ParameterDict,
+        optimizers: dict[str, torch.optim.Optimizer],
     ):
         """Sanity check for the parameters and optimizers.
 
@@ -101,7 +102,6 @@ class MCMCStrategy(Strategy):
             after initializing the strategy to ensure the convention of the parameters
             and optimizers is as expected.
         """
-
         super().check_sanity(params, optimizers)
         # The following keys are required for this strategy.
         for key in ["means", "scales", "quats", "opacities"]:
@@ -120,16 +120,21 @@ class MCMCStrategy(Strategy):
 
     def step_post_backward(
         self,
-        params: Union[Dict[str, torch.nn.Parameter], torch.nn.ParameterDict],
-        optimizers: Dict[str, torch.optim.Optimizer],
-        state: Dict[str, Any],
+        params: dict[str, torch.nn.Parameter] | torch.nn.ParameterDict,
+        optimizers: dict[str, torch.optim.Optimizer],
+        state: dict[str, Any],
         step: int,
-        info: Dict[str, Any],
+        info: dict[str, Any],
         lr: float,
     ):
         """Callback function to be executed after the `loss.backward()` call.
 
         Args:
+            params: Gaussian splat parameters.
+            optimizers: Optimizers for the parameters.
+            state: Strategy state dictionary.
+            step: Current training step.
+            info: Dictionary of extra information.
             lr (float): Learning rate for "means" attribute of the GS.
         """
         # move to the correct device
@@ -174,8 +179,8 @@ class MCMCStrategy(Strategy):
     @torch.no_grad()
     def _relocate_gs(
         self,
-        params: Union[Dict[str, torch.nn.Parameter], torch.nn.ParameterDict],
-        optimizers: Dict[str, torch.optim.Optimizer],
+        params: dict[str, torch.nn.Parameter] | torch.nn.ParameterDict,
+        optimizers: dict[str, torch.optim.Optimizer],
         binoms: Tensor,
     ) -> int:
         opacities = torch.sigmoid(params["opacities"].flatten())
@@ -195,8 +200,8 @@ class MCMCStrategy(Strategy):
     @torch.no_grad()
     def _add_new_gs(
         self,
-        params: Union[Dict[str, torch.nn.Parameter], torch.nn.ParameterDict],
-        optimizers: Dict[str, torch.optim.Optimizer],
+        params: dict[str, torch.nn.Parameter] | torch.nn.ParameterDict,
+        optimizers: dict[str, torch.optim.Optimizer],
         binoms: Tensor,
     ) -> int:
         current_n_points = len(params["means"])

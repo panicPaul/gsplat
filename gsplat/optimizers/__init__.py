@@ -13,4 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Optimizers for Gaussian splat parameters."""
+
 from .selective_adam import SelectiveAdam

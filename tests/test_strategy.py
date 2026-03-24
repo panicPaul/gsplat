@@ -22,9 +22,9 @@ pytest <THIS_PY_FILE> -s
 ```
 """
 
+import gsplat
 import pytest
 import torch
-import gsplat
 
 device = torch.device("cuda:0")
 
@@ -51,7 +51,7 @@ def test_strategy():
     optimizers = {k: torch.optim.Adam([v], lr=1e-3) for k, v in params.items()}
 
     # A dummy rendering call
-    render_colors, render_alphas, info = rasterization(
+    render_colors, _, info = rasterization(
         means=params["means"],
         quats=params["quats"],  # F.normalize is fused into the kernel
         scales=torch.exp(params["scales"]),
@@ -77,7 +77,9 @@ def test_strategy():
     strategy.check_sanity(params, optimizers)
     state = strategy.initialize_state()
     render_colors.mean().backward(retain_graph=True)
-    strategy.step_post_backward(params, optimizers, state, step=600, info=info, lr=1e-3)
+    strategy.step_post_backward(
+        params, optimizers, state, step=600, info=info, lr=1e-3
+    )
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="No CUDA device")
@@ -107,11 +109,13 @@ def test_strategy_requires_grad():
     params["non_trainable_features"].requires_grad = False
     requires_grad_map = {k: v.requires_grad for k, v in params.items()}
     optimizers = {
-        k: torch.optim.Adam([v], lr=1e-3) for k, v in params.items() if v.requires_grad
+        k: torch.optim.Adam([v], lr=1e-3)
+        for k, v in params.items()
+        if v.requires_grad
     }
 
     # A dummy rendering call
-    render_colors, render_alphas, info = rasterization(
+    render_colors, _render_alphas, info = rasterization(
         means=params["means"],
         quats=params["quats"],  # F.normalize is fused into the kernel
         scales=torch.exp(params["scales"]),
@@ -140,7 +144,9 @@ def test_strategy_requires_grad():
     strategy.check_sanity(params, optimizers)
     state = strategy.initialize_state()
     render_colors.mean().backward(retain_graph=True)
-    strategy.step_post_backward(params, optimizers, state, step=600, info=info, lr=1e-3)
+    strategy.step_post_backward(
+        params, optimizers, state, step=600, info=info, lr=1e-3
+    )
     assert params["non_trainable_features"].grad is None
     for k, v in params.items():
         assert v.requires_grad == requires_grad_map[k]

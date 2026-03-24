@@ -14,14 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import viser
+from collections.abc import Callable
 from pathlib import Path
 from typing import Literal
-from typing import Tuple, Callable
-from nerfview import Viewer, RenderTabState
 
-from gsplat.rendering import RasterizeMode
+import viser
 from gsplat.cuda._wrapper import CameraModel
+from gsplat.rendering import RasterizeMode
+from nerfview import RenderTabState, Viewer
 
 
 class GsplatRenderTabState(RenderTabState):
@@ -35,21 +35,21 @@ class GsplatRenderTabState(RenderTabState):
     far_plane: float = 1e2
     radius_clip: float = 0.0
     eps2d: float = 0.3
-    backgrounds: Tuple[float, float, float] = (0.0, 0.0, 0.0)
-    render_mode: Literal["rgb", "depth(accumulated)", "depth(expected)", "alpha"] = "rgb"
+    backgrounds: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    render_mode: Literal[
+        "rgb", "depth(accumulated)", "depth(expected)", "alpha"
+    ] = "rgb"
     normalize_nearfar: bool = False
     inverse: bool = False
-    colormap: Literal["turbo", "viridis", "magma", "inferno", "cividis", "gray"] = (
-        "turbo"
-    )
+    colormap: Literal[
+        "turbo", "viridis", "magma", "inferno", "cividis", "gray"
+    ] = "turbo"
     rasterize_mode: RasterizeMode = "classic"
     camera_model: CameraModel = "pinhole"
 
 
 class GsplatViewer(Viewer):
-    """
-    Viewer for gsplat.
-    """
+    """Viewer for gsplat."""
 
     def __init__(
         self,
@@ -94,7 +94,9 @@ class GsplatViewer(Viewer):
 
                 @max_sh_degree_number.on_update
                 def _(_) -> None:
-                    self.render_tab_state.max_sh_degree = int(max_sh_degree_number.value)
+                    self.render_tab_state.max_sh_degree = int(
+                        max_sh_degree_number.value
+                    )
                     self.rerender(_)
 
                 near_far_plane_vec2 = server.gui.add_vector2(
@@ -111,8 +113,12 @@ class GsplatViewer(Viewer):
 
                 @near_far_plane_vec2.on_update
                 def _(_) -> None:
-                    self.render_tab_state.near_plane = near_far_plane_vec2.value[0]
-                    self.render_tab_state.far_plane = near_far_plane_vec2.value[1]
+                    self.render_tab_state.near_plane = (
+                        near_far_plane_vec2.value[0]
+                    )
+                    self.render_tab_state.far_plane = near_far_plane_vec2.value[
+                        1
+                    ]
                     self.rerender(_)
 
                 radius_clip_slider = server.gui.add_number(
@@ -169,7 +175,9 @@ class GsplatViewer(Viewer):
                     else:
                         normalize_nearfar_checkbox.disabled = True
                         inverse_checkbox.disabled = True
-                    self.render_tab_state.render_mode = render_mode_dropdown.value
+                    self.render_tab_state.render_mode = (
+                        render_mode_dropdown.value
+                    )
                     self.rerender(_)
 
                 normalize_nearfar_checkbox = server.gui.add_checkbox(
@@ -219,7 +227,9 @@ class GsplatViewer(Viewer):
 
                 @rasterize_mode_dropdown.on_update
                 def _(_) -> None:
-                    self.render_tab_state.rasterize_mode = rasterize_mode_dropdown.value
+                    self.render_tab_state.rasterize_mode = (
+                        rasterize_mode_dropdown.value
+                    )
                     self.rerender(_)
 
                 camera_model_dropdown = server.gui.add_dropdown(
@@ -231,7 +241,9 @@ class GsplatViewer(Viewer):
 
                 @camera_model_dropdown.on_update
                 def _(_) -> None:
-                    self.render_tab_state.camera_model = camera_model_dropdown.value
+                    self.render_tab_state.camera_model = (
+                        camera_model_dropdown.value
+                    )
                     self.rerender(_)
 
         self._rendering_tab_handles.update(

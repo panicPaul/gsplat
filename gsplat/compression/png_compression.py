@@ -13,10 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""PNG-based compression for Gaussian splats using quantization and K-means clustering."""
+
 import json
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Dict
+from typing import Any
 
 import numpy as np
 import torch
@@ -29,8 +32,7 @@ from gsplat.utils import inverse_log_transform, log_transform
 
 @dataclass
 class PngCompression:
-    """Uses quantization and sorting to compress splats into PNG files and uses
-    K-means clustering to compress the spherical harmonic coefficents.
+    """Uses quantization and sorting to compress splats into PNG files and uses K-means clustering to compress the spherical harmonic coefficients.
 
     .. warning::
         This class requires the `imageio <https://pypi.org/project/imageio/>`_,
@@ -70,8 +72,7 @@ class PngCompression:
         }
         if param_name in compress_fn_map:
             return compress_fn_map[param_name]
-        else:
-            return _compress_npz
+        return _compress_npz
 
     def _get_decompress_fn(self, param_name: str) -> Callable:
         decompress_fn_map = {
@@ -84,17 +85,15 @@ class PngCompression:
         }
         if param_name in decompress_fn_map:
             return decompress_fn_map[param_name]
-        else:
-            return _decompress_npz
+        return _decompress_npz
 
-    def compress(self, compress_dir: str, splats: Dict[str, Tensor]) -> None:
-        """Run compression
+    def compress(self, compress_dir: str, splats: dict[str, Tensor]) -> None:
+        """Run compression.
 
         Args:
             compress_dir (str): directory to save compressed files
             splats (Dict[str, Tensor]): Gaussian splats to compress
         """
-
         # Param-specific preprocessing
         splats["means"] = log_transform(splats["means"])
         splats["quats"] = F.normalize(splats["quats"], dim=-1)
@@ -125,8 +124,8 @@ class PngCompression:
         with open(os.path.join(compress_dir, "meta.json"), "w") as f:
             json.dump(meta, f)
 
-    def decompress(self, compress_dir: str) -> Dict[str, Tensor]:
-        """Run decompression
+    def decompress(self, compress_dir: str) -> dict[str, Tensor]:
+        """Run decompression.
 
         Args:
             compress_dir (str): directory that contains compressed files
@@ -134,20 +133,22 @@ class PngCompression:
         Returns:
             Dict[str, Tensor]: decompressed Gaussian splats
         """
-        with open(os.path.join(compress_dir, "meta.json"), "r") as f:
+        with open(os.path.join(compress_dir, "meta.json")) as f:
             meta = json.load(f)
 
         splats = {}
         for param_name, param_meta in meta.items():
             decompress_fn = self._get_decompress_fn(param_name)
-            splats[param_name] = decompress_fn(compress_dir, param_name, param_meta)
+            splats[param_name] = decompress_fn(
+                compress_dir, param_name, param_meta
+            )
 
         # Param-specific postprocessing
         splats["means"] = inverse_log_transform(splats["means"])
         return splats
 
 
-def _crop_n_splats(splats: Dict[str, Tensor], n_crop: int) -> Dict[str, Tensor]:
+def _crop_n_splats(splats: dict[str, Tensor], n_crop: int) -> dict[str, Tensor]:
     opacities = splats["opacities"]
     keep_indices = torch.argsort(opacities, descending=True)[:-n_crop]
     for k, v in splats.items():
@@ -157,7 +158,7 @@ def _crop_n_splats(splats: Dict[str, Tensor], n_crop: int) -> Dict[str, Tensor]:
 
 def _compress_png(
     compress_dir: str, param_name: str, params: Tensor, n_sidelen: int, **kwargs
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Compress parameters with 8-bit quantization and lossless PNG compression.
 
     Args:
@@ -165,6 +166,7 @@ def _compress_png(
         param_name (str): parameter field name
         params (Tensor): parameters
         n_sidelen (int): image side length
+        **kwargs: ignored extra keyword arguments
 
     Returns:
         Dict[str, Any]: metadata
@@ -197,7 +199,9 @@ def _compress_png(
     return meta
 
 
-def _decompress_png(compress_dir: str, param_name: str, meta: Dict[str, Any]) -> Tensor:
+def _decompress_png(
+    compress_dir: str, param_name: str, meta: dict[str, Any]
+) -> Tensor:
     """Decompress parameters from PNG file.
 
     Args:
@@ -229,7 +233,7 @@ def _decompress_png(compress_dir: str, param_name: str, meta: Dict[str, Any]) ->
 
 def _compress_png_16bit(
     compress_dir: str, param_name: str, params: Tensor, n_sidelen: int, **kwargs
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Compress parameters with 16-bit quantization and PNG compression.
 
     Args:
@@ -237,6 +241,7 @@ def _compress_png_16bit(
         param_name (str): parameter field name
         params (Tensor): parameters
         n_sidelen (int): image side length
+        **kwargs: ignored extra keyword arguments
 
     Returns:
         Dict[str, Any]: metadata
@@ -260,10 +265,12 @@ def _compress_png_16bit(
     img_l = img & 0xFF
     img_u = (img >> 8) & 0xFF
     imageio.imwrite(
-        os.path.join(compress_dir, f"{param_name}_l.png"), img_l.astype(np.uint8)
+        os.path.join(compress_dir, f"{param_name}_l.png"),
+        img_l.astype(np.uint8),
     )
     imageio.imwrite(
-        os.path.join(compress_dir, f"{param_name}_u.png"), img_u.astype(np.uint8)
+        os.path.join(compress_dir, f"{param_name}_u.png"),
+        img_u.astype(np.uint8),
     )
 
     meta = {
@@ -276,7 +283,7 @@ def _compress_png_16bit(
 
 
 def _decompress_png_16bit(
-    compress_dir: str, param_name: str, meta: Dict[str, Any]
+    compress_dir: str, param_name: str, meta: dict[str, Any]
 ) -> Tensor:
     """Decompress parameters from PNG files.
 
@@ -312,7 +319,7 @@ def _decompress_png_16bit(
 
 def _compress_npz(
     compress_dir: str, param_name: str, params: Tensor, **kwargs
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Compress parameters with numpy's NPZ compression."""
     npz_dict = {"arr": params.detach().cpu().numpy()}
     save_fp = os.path.join(compress_dir, f"{param_name}.npz")
@@ -325,7 +332,9 @@ def _compress_npz(
     return meta
 
 
-def _decompress_npz(compress_dir: str, param_name: str, meta: Dict[str, Any]) -> Tensor:
+def _decompress_npz(
+    compress_dir: str, param_name: str, meta: dict[str, Any]
+) -> Tensor:
     """Decompress parameters with numpy's NPZ compression."""
     arr = np.load(os.path.join(compress_dir, f"{param_name}.npz"))["arr"]
     params = torch.tensor(arr)
@@ -343,7 +352,7 @@ def _compress_kmeans(
     eps: float = 1e-6,
     verbose: bool = True,
     **kwargs,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Run K-means clustering on parameters and save centroids and labels to a npz file.
 
     .. warning::
@@ -357,6 +366,7 @@ def _compress_kmeans(
         quantization (int): number of bits in quantization
         eps (float, optional): small value to avoid numerical issues. Default to 1e-6.
         verbose (bool, optional): Whether to print verbose information. Default to True.
+        **kwargs: ignored extra keyword arguments
 
     Returns:
         Dict[str, Any]: metadata
@@ -375,7 +385,9 @@ def _compress_kmeans(
         }
         return meta
 
-    kmeans = KMeans(n_clusters=n_clusters, distance="manhattan", verbose=verbose)
+    kmeans = KMeans(
+        n_clusters=n_clusters, distance="manhattan", verbose=verbose
+    )
     x = params.reshape(params.shape[0], -1).permute(1, 0).contiguous()
     labels = kmeans.fit(x)
     labels = labels.detach().cpu().numpy()
@@ -385,14 +397,18 @@ def _compress_kmeans(
     maxs = torch.max(centroids)
     centroids_norm = (centroids - mins) / (maxs - mins)
     centroids_norm = centroids_norm.detach().cpu().numpy()
-    centroids_quant = (centroids_norm * (2**quantization - 1)).round().astype(np.uint8)
+    centroids_quant = (
+        (centroids_norm * (2**quantization - 1)).round().astype(np.uint8)
+    )
     labels = labels.astype(np.uint16)
 
     npz_dict = {
         "centroids": centroids_quant,
         "labels": labels,
     }
-    np.savez_compressed(os.path.join(compress_dir, f"{param_name}.npz"), **npz_dict)
+    np.savez_compressed(
+        os.path.join(compress_dir, f"{param_name}.npz"), **npz_dict
+    )
     meta = {
         "shape": list(params.shape),
         "dtype": str(params.dtype).split(".")[1],
@@ -404,7 +420,7 @@ def _compress_kmeans(
 
 
 def _decompress_kmeans(
-    compress_dir: str, param_name: str, meta: Dict[str, Any], **kwargs
+    compress_dir: str, param_name: str, meta: dict[str, Any], **kwargs
 ) -> Tensor:
     """Decompress parameters from K-means compression.
 
@@ -412,6 +428,7 @@ def _decompress_kmeans(
         compress_dir (str): compression directory
         param_name (str): parameter field name
         meta (Dict[str, Any]): metadata
+        **kwargs: ignored extra keyword arguments
 
     Returns:
         Tensor: parameters

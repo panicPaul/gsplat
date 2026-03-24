@@ -3308,7 +3308,7 @@ packages:
 - pypi: ./
   name: gsplat
   version: 1.5.3
-  sha256: 32c23efe88cf6b877f3cc00567e893ae84b92aedbcaec1ed4547a7b7149d1198
+  sha256: dc70549bc4fa3795d5897d0e6b3f5aff8c1586e756a32fed2d5cfa9c04556076
   requires_dist:
   - torch>=2.11.0
   - ninja>=1.13.0,<2

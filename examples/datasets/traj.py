@@ -13,8 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Code borrowed from
+"""Code borrowed from
 
 https://github.com/google-research/multinerf/blob/5b4d4f64608ec8077222c52fdf814d40acc10bc1/internal/camera_utils.py
 """
@@ -28,7 +27,9 @@ def normalize(x: np.ndarray) -> np.ndarray:
     return x / np.linalg.norm(x)
 
 
-def viewmatrix(lookdir: np.ndarray, up: np.ndarray, position: np.ndarray) -> np.ndarray:
+def viewmatrix(
+    lookdir: np.ndarray, up: np.ndarray, position: np.ndarray
+) -> np.ndarray:
     """Construct lookat view matrix."""
     vec2 = normalize(lookdir)
     vec0 = normalize(np.cross(up, vec2))
@@ -84,7 +85,9 @@ def generate_spiral_path(
     render_poses = []
     cam2world = average_pose(poses)
     up = poses[:, :3, 1].mean(0)
-    for theta in np.linspace(0.0, 2.0 * np.pi * n_rots, n_frames, endpoint=False):
+    for theta in np.linspace(
+        0.0, 2.0 * np.pi * n_rots, n_frames, endpoint=False
+    ):
         t = radii * [np.cos(theta), -np.sin(theta), -np.sin(theta * zrate), 1.0]
         position = cam2world @ t
         lookat = cam2world @ [0, 0, -focal, 1.0]

@@ -14,22 +14,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Trigger compiling (for debugging):
+"""CUDA backend loader for gsplat.
 
-VERBOSE=1 DEBUG=1 TORCH_CUDA_ARCH_LIST="8.9" python -c "from gsplat.cuda._backend import _C"
+Trigger compiling (for debugging)::
+
+    VERBOSE=1 DEBUG=1 TORCH_CUDA_ARCH_LIST="8.9" python -c "from gsplat.cuda._backend import _C"
 """
 
 import os
 from subprocess import DEVNULL, call
+
 import torch.utils.cpp_extension as jit
-from .build import build_and_load_gsplat
 from rich.console import Console
+
+from .build import build_and_load_gsplat
 
 
 def cuda_toolkit_available():
-    """
-    Check more robustly if the CUDA toolkit is available.
+    """Check more robustly if the CUDA toolkit is available.
+
     1. Attempt to locate `CUDA_HOME` using PyTorch’s internal method.
     2. Check if nvcc is present in that location.
     """

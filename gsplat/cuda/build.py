@@ -14,15 +14,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-import shutil
-import time
+"""Build utilities for compiling the gsplat CUDA extension."""
+
 import glob
-import sys
-import torch
-import platform
 import json
+import os
+import platform
+import shutil
+import sys
+import time
 from types import SimpleNamespace
+
+import torch
 
 try:
     import torch.utils.cpp_extension as jit
@@ -36,7 +39,7 @@ except ImportError as e:
             "Alternatively, upgrade to PyTorch >= 2.9."
         ) from e
     raise
-from contextlib import nullcontext, contextmanager
+from contextlib import contextmanager, nullcontext
 
 try:
     from rich.console import Console
@@ -59,12 +62,15 @@ BUILD_3DGS = os.getenv("BUILD_3DGS")
 BUILD_2DGS = os.getenv("BUILD_2DGS")
 BUILD_ADAM = os.getenv("BUILD_ADAM")
 BUILD_RELOC = os.getenv("BUILD_RELOC")
-BUILD_CAMERA_WRAPPERS = os.getenv("BUILD_CAMERA_WRAPPERS", "1" if DEBUG else "0") == "1"
+BUILD_CAMERA_WRAPPERS = (
+    os.getenv("BUILD_CAMERA_WRAPPERS", "1" if DEBUG else "0") == "1"
+)
 
 NUM_CHANNELS = os.getenv("NUM_CHANNELS")
 
 
 def get_build_parameters():
+    """Return the build parameters for the gsplat CUDA extension."""
     name = "gsplat_cuda"
     current_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -87,7 +93,11 @@ def get_build_parameters():
     extra_ldflags = []
 
     if sys.platform == "win32":
-        extra_cflags += ["/std:c++20", "/Zc:preprocessor", "-DWIN32_LEAN_AND_MEAN"]
+        extra_cflags += [
+            "/std:c++20",
+            "/Zc:preprocessor",
+            "-DWIN32_LEAN_AND_MEAN",
+        ]
         extra_cuda_cflags += [
             "-std=c++20",
             "-allow-unsupported-compiler",
@@ -153,7 +163,9 @@ def get_build_parameters():
             extra_cuda_cflags += ["-DBUILD_CAMERA_WRAPPERS=1"]
     else:
         # Remove 'csrc/CameraWrappers.cu' from the sources list if it exists
-        sources = [s for s in sources if not s.endswith("csrc/CameraWrappers.cu")]
+        sources = [
+            s for s in sources if not s.endswith("csrc/CameraWrappers.cu")
+        ]
 
     extra_ldflags += [] if WITH_SYMBOLS or sys.platform == "win32" else ["-s"]
 
@@ -222,7 +234,7 @@ def build_and_load_gsplat():
     build_params_changed = False
     try:
         if os.path.exists(saved_build_params_fname):
-            with open(saved_build_params_fname, "r") as f:
+            with open(saved_build_params_fname) as f:
                 saved_build_params = SimpleNamespace(**json.load(f))
             build_params_changed = saved_build_params != build_params
     except Exception as e:
@@ -231,7 +243,9 @@ def build_and_load_gsplat():
                 f"[bold yellow]gsplat: rebuilding due to error loading saved build parameters: {e}"
             )
         else:
-            print(f"gsplat: rebuilding due to error loading saved build parameters: {e}")
+            print(
+                f"gsplat: rebuilding due to error loading saved build parameters: {e}"
+            )
 
     # If parameters have changed,
     if build_params_changed:
@@ -269,7 +283,7 @@ def build_and_load_gsplat():
     @contextmanager
     def status_context():
         tic = time.time()
-        msg = f"gsplat: Setting up CUDA with MAX_JOBS={MAX_JOBS if MAX_JOBS else 'max'} (This may take a few minutes the first time)"
+        msg = f"gsplat: Setting up CUDA with MAX_JOBS={MAX_JOBS or 'max'} (This may take a few minutes the first time)"
         if _console is not None:
             ctx = _console.status(f"[bold yellow]{msg}", spinner="bouncingBall")
         else:
@@ -295,7 +309,9 @@ def build_and_load_gsplat():
     ) or os.path.exists(os.path.join(build_dir, f"{build_params.name}.lib"))
 
     with (
-        status_context() if not module_exists or build_params_changed else nullcontext()
+        status_context()
+        if not module_exists or build_params_changed
+        else nullcontext()
     ):
         # If the JIT build happens concurrently in multiple processes,
         # race conditions can occur when removing the lock file at:
@@ -320,7 +336,9 @@ def build_and_load_gsplat():
             return gsplat_module
         except OSError:
             # The module should already be compiled if we get OSError
-            return jit._import_module_from_library(build_params.name, build_dir, True)
+            return jit._import_module_from_library(
+                build_params.name, build_dir, True
+            )
         finally:
             for envvar in envvars_to_remove:
                 os.environ.pop(envvar)

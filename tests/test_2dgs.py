@@ -16,15 +16,14 @@
 
 import math
 
+import gsplat
 import pytest
 import torch
-from typing_extensions import Tuple
-import gsplat
 
 device = torch.device("cuda:0")
 
 
-def expand(data: dict, batch_dims: Tuple[int, ...]):
+def expand(data: dict, batch_dims: tuple[int, ...]):
     # append multiple batch dimensions to the front of the tensor
     # eg. x.shape = [N, 3], batch_dims = (1, 2), return shape is [1, 2, N, 3]
     # eg. x.shape = [N, 3], batch_dims = (), return shape is [N, 3]
@@ -54,7 +53,9 @@ def test_data():
     W, H = 640, 480
     fx, fy, cx, cy = W, W, W // 2, H // 2
     Ks = torch.broadcast_to(
-        torch.tensor([[fx, 0.0, cx], [0.0, fy, cy], [0.0, 0.0, 1.0]], device=device),
+        torch.tensor(
+            [[fx, 0.0, cx], [0.0, fy, cy], [0.0, 0.0, 1.0]], device=device
+        ),
         (C, 3, 3),
     )
     return {
@@ -73,7 +74,7 @@ def test_data():
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="No CUDA device")
 @pytest.mark.skipif(not gsplat.has_2dgs(), reason="2DGS support wasn't built")
 @pytest.mark.parametrize("batch_dims", [(), (2,), (1, 2)])
-def test_projection_2dgs(test_data, batch_dims: Tuple[int, ...]):
+def test_projection_2dgs(test_data, batch_dims: tuple[int, ...]):
     from gsplat.cuda._torch_impl_2dgs import _fully_fused_projection_2dgs
     from gsplat.cuda._wrapper import fully_fused_projection_2dgs
 
@@ -93,24 +94,34 @@ def test_projection_2dgs(test_data, batch_dims: Tuple[int, ...]):
     means.requires_grad = True
 
     # forward
-    _radii, _means2d, _depths, _ray_transforms, _normals = _fully_fused_projection_2dgs(
-        means, quats, scales, viewmats, Ks, width, height
+    _radii, _means2d, _depths, _ray_transforms, _normals = (
+        _fully_fused_projection_2dgs(
+            means, quats, scales, viewmats, Ks, width, height
+        )
     )
 
-    radii, means2d, depths, ray_transforms, normals = fully_fused_projection_2dgs(
-        means, quats, scales, viewmats, Ks, width, height
+    radii, means2d, depths, ray_transforms, normals = (
+        fully_fused_projection_2dgs(
+            means, quats, scales, viewmats, Ks, width, height
+        )
     )
 
     # TODO (WZ): is the following true for 2dgs as while?
     # radii is integer so we allow for 1 unit difference
     valid = ((radii > 0) & (_radii > 0)).all(dim=-1)
     torch.testing.assert_close(radii, _radii, rtol=1e-3, atol=1)
-    torch.testing.assert_close(means2d[valid], _means2d[valid], rtol=1e-4, atol=1e-4)
-    torch.testing.assert_close(depths[valid], _depths[valid], rtol=1e-4, atol=1e-4)
+    torch.testing.assert_close(
+        means2d[valid], _means2d[valid], rtol=1e-4, atol=1e-4
+    )
+    torch.testing.assert_close(
+        depths[valid], _depths[valid], rtol=1e-4, atol=1e-4
+    )
     torch.testing.assert_close(
         ray_transforms[valid], _ray_transforms[valid], rtol=1e-4, atol=1e-4
     )
-    torch.testing.assert_close(normals[valid], _normals[valid], rtol=1e-4, atol=1e-4)
+    torch.testing.assert_close(
+        normals[valid], _normals[valid], rtol=1e-4, atol=1e-4
+    )
 
     # backward
     v_means2d = torch.randn_like(means2d) * valid[..., None]
@@ -146,7 +157,7 @@ def test_projection_2dgs(test_data, batch_dims: Tuple[int, ...]):
 @pytest.mark.parametrize("sparse_grad", [False])
 @pytest.mark.parametrize("batch_dims", [(), (2,), (1, 2)])
 def test_fully_fused_projection_packed_2dgs(
-    test_data, sparse_grad: bool, batch_dims: Tuple[int, ...]
+    test_data, sparse_grad: bool, batch_dims: tuple[int, ...]
 ):
     from gsplat.cuda._wrapper import fully_fused_projection_2dgs
 
@@ -186,15 +197,17 @@ def test_fully_fused_projection_packed_2dgs(
         sparse_grad=sparse_grad,
     )
 
-    _radii, _means2d, _depths, _ray_transforms, _normals = fully_fused_projection_2dgs(
-        means,
-        quats,
-        scales,
-        viewmats,
-        Ks,
-        width,
-        height,
-        packed=False,
+    _radii, _means2d, _depths, _ray_transforms, _normals = (
+        fully_fused_projection_2dgs(
+            means,
+            quats,
+            scales,
+            viewmats,
+            Ks,
+            width,
+            height,
+            packed=False,
+        )
     )
 
     B = math.prod(batch_dims)
@@ -207,7 +220,9 @@ def test_fully_fused_projection_packed_2dgs(
     ).to_dense()
     __radii = __radii.reshape(batch_dims + (C, N, 2))
     __means2d = torch.sparse_coo_tensor(
-        torch.stack([batch_ids, camera_ids, gaussian_ids]), means2d, (B, C, N, 2)
+        torch.stack([batch_ids, camera_ids, gaussian_ids]),
+        means2d,
+        (B, C, N, 2),
     ).to_dense()
     __means2d = __means2d.reshape(batch_dims + (C, N, 2))
     __depths = torch.sparse_coo_tensor(
@@ -221,18 +236,26 @@ def test_fully_fused_projection_packed_2dgs(
     ).to_dense()
     __ray_transforms = __ray_transforms.reshape(batch_dims + (C, N, 3, 3))
     __normals = torch.sparse_coo_tensor(
-        torch.stack([batch_ids, camera_ids, gaussian_ids]), normals, (B, C, N, 3)
+        torch.stack([batch_ids, camera_ids, gaussian_ids]),
+        normals,
+        (B, C, N, 3),
     ).to_dense()
     __normals = __normals.reshape(batch_dims + (C, N, 3))
 
     sel = ((__radii > 0) & (_radii > 0)).all(dim=-1)
     torch.testing.assert_close(__radii[sel], _radii[sel], rtol=0, atol=1)
-    torch.testing.assert_close(__means2d[sel], _means2d[sel], rtol=1e-4, atol=1e-4)
-    torch.testing.assert_close(__depths[sel], _depths[sel], rtol=1e-4, atol=1e-4)
+    torch.testing.assert_close(
+        __means2d[sel], _means2d[sel], rtol=1e-4, atol=1e-4
+    )
+    torch.testing.assert_close(
+        __depths[sel], _depths[sel], rtol=1e-4, atol=1e-4
+    )
     torch.testing.assert_close(
         __ray_transforms[sel], _ray_transforms[sel], rtol=1e-4, atol=1e-4
     )
-    torch.testing.assert_close(__normals[sel], _normals[sel], rtol=1e-4, atol=1e-4)
+    torch.testing.assert_close(
+        __normals[sel], _normals[sel], rtol=1e-4, atol=1e-4
+    )
 
     # backward
     v_means2d = torch.randn_like(_means2d) * sel[..., None]
@@ -270,7 +293,9 @@ def test_fully_fused_projection_packed_2dgs(
 @pytest.mark.skipif(not gsplat.has_2dgs(), reason="2DGS support wasn't built")
 @pytest.mark.parametrize("channels", [3, 31])
 @pytest.mark.parametrize("batch_dims", [(), (2,), (1, 2)])
-def test_rasterize_to_pixels_2dgs(test_data, channels: int, batch_dims: Tuple[int, ...]):
+def test_rasterize_to_pixels_2dgs(
+    test_data, channels: int, batch_dims: tuple[int, ...]
+):
     from gsplat.cuda._torch_impl_2dgs import _rasterize_to_pixels_2dgs
     from gsplat.cuda._wrapper import (
         fully_fused_projection_2dgs,
@@ -303,8 +328,10 @@ def test_rasterize_to_pixels_2dgs(test_data, channels: int, batch_dims: Tuple[in
     colors = test_data["colors"]
     backgrounds = test_data["backgrounds"]
 
-    radii, means2d, depths, ray_transforms, normals = fully_fused_projection_2dgs(
-        means, quats, scales, viewmats, Ks, width, height
+    radii, means2d, depths, ray_transforms, normals = (
+        fully_fused_projection_2dgs(
+            means, quats, scales, viewmats, Ks, width, height
+        )
     )
     colors = torch.cat([colors, depths[..., None]], dim=-1)
     backgrounds = torch.zeros(batch_dims + (C, channels + 1), device=device)
@@ -317,7 +344,9 @@ def test_rasterize_to_pixels_2dgs(test_data, channels: int, batch_dims: Tuple[in
         means2d, radii, depths, tile_size, tile_width, tile_height
     )
     isect_offsets = isect_offset_encode(isect_ids, I, tile_width, tile_height)
-    isect_offsets = isect_offsets.reshape(batch_dims + (C, tile_height, tile_width))
+    isect_offsets = isect_offsets.reshape(
+        batch_dims + (C, tile_height, tile_width)
+    )
     densify = torch.zeros_like(means2d, device=means2d.device)
 
     means2d.requires_grad = True
@@ -397,14 +426,24 @@ def test_rasterize_to_pixels_2dgs(test_data, channels: int, batch_dims: Tuple[in
     )
 
     # assert close forward
-    torch.testing.assert_close(render_colors, _render_colors, atol=1e-3, rtol=1e-3)
-    torch.testing.assert_close(render_alphas, _render_alphas, atol=1e-3, rtol=1e-3)
-    torch.testing.assert_close(render_normals, _render_normals, atol=1e-3, rtol=1e-3)
+    torch.testing.assert_close(
+        render_colors, _render_colors, atol=1e-3, rtol=1e-3
+    )
+    torch.testing.assert_close(
+        render_alphas, _render_alphas, atol=1e-3, rtol=1e-3
+    )
+    torch.testing.assert_close(
+        render_normals, _render_normals, atol=1e-3, rtol=1e-3
+    )
 
     # assert close backward
     torch.testing.assert_close(v_means2d, _v_means2d, rtol=1e-3, atol=1e-3)
-    torch.testing.assert_close(v_ray_transforms, _v_ray_transforms, rtol=2e-1, atol=5e-2)
+    torch.testing.assert_close(
+        v_ray_transforms, _v_ray_transforms, rtol=2e-1, atol=5e-2
+    )
     torch.testing.assert_close(v_colors, _v_colors, rtol=1e-3, atol=1e-3)
     torch.testing.assert_close(v_opacities, _v_opacities, rtol=1e-3, atol=1e-3)
-    torch.testing.assert_close(v_backgrounds, _v_backgrounds, rtol=1e-5, atol=1e-5)
+    torch.testing.assert_close(
+        v_backgrounds, _v_backgrounds, rtol=1e-5, atol=1e-5
+    )
     torch.testing.assert_close(v_normals, _v_normals, rtol=1e-3, atol=1e-3)

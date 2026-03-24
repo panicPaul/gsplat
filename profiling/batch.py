@@ -22,10 +22,10 @@ pytest <THIS_PY_FILE>
 """
 
 import time
+from collections.abc import Callable
+from typing import Literal
 
 import torch
-from typing_extensions import Callable, Literal
-
 from gsplat._helper import load_test_data
 from gsplat.distributed import cli
 from gsplat.rendering import rasterization
@@ -78,13 +78,16 @@ def main(
     tensors = [means, quats, scales, opacities, colors]
     for i, tensor in enumerate(tensors):
         tensor = tensor[:n_gaussians]
-        tensor = torch.broadcast_to(tensor, (n_batches, *tensor.shape)).contiguous()
+        tensor = torch.broadcast_to(
+            tensor, (n_batches, *tensor.shape)
+        ).contiguous()
         tensor.requires_grad = True
         tensors[i] = tensor
     means, quats, scales, opacities, colors = tensors
 
     viewmats = torch.broadcast_to(
-        viewmats[None, None, 0, ...], (n_batches, n_cameras, *viewmats.shape[1:])
+        viewmats[None, None, 0, ...],
+        (n_batches, n_cameras, *viewmats.shape[1:]),
     ).clone()
     Ks = torch.broadcast_to(
         Ks[None, None, 0, ...], (n_batches, n_cameras, *Ks.shape[1:])

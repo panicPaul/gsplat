@@ -15,7 +15,6 @@
 # limitations under the License.
 
 import os
-from typing import Optional, Tuple
 
 import numpy as np
 import torch
@@ -23,8 +22,7 @@ import torch.nn.functional as F
 
 
 def expand_named_params(named_params):
-    """
-    Expand a list of (name, value) tuples into pytest.param objects with IDs.
+    """Expand a list of (name, value) tuples into pytest.param objects with IDs.
 
     Args:
         named_params: List of (name, value) tuples where name is the test ID
@@ -46,16 +44,25 @@ def expand_named_params(named_params):
 
 
 def load_test_data(
-    data_path: Optional[str] = None,
+    data_path: str | None = None,
     device="cuda",
-    scene_crop: Tuple[float, float, float, float, float, float] = (-2, -2, -2, 2, 2, 2),
+    scene_crop: tuple[float, float, float, float, float, float] = (
+        -2,
+        -2,
+        -2,
+        2,
+        2,
+        2,
+    ),
     scene_grid: int = 1,
 ):
     """Load the test data."""
     assert scene_grid % 2 == 1, "scene_grid must be odd"
 
     if data_path is None:
-        data_path = os.path.join(os.path.dirname(__file__), "../assets/test_garden.npz")
+        data_path = os.path.join(
+            os.path.dirname(__file__), "../assets/test_garden.npz"
+        )
     data = np.load(data_path)
     height, width = data["height"].item(), data["width"].item()
     viewmats = torch.from_numpy(data["viewmats"]).float().to(device)
@@ -80,7 +87,9 @@ def load_test_data(
         ],
         indexing="ij",
     )
-    grid = torch.stack([gridx, gridy, torch.zeros_like(gridx)], dim=-1).reshape(-1, 3)
+    grid = torch.stack([gridx, gridy, torch.zeros_like(gridx)], dim=-1).reshape(
+        -1, 3
+    )
     means = means[None, :, :] + grid[:, None, :] * edges[None, None, :]
     means = means.reshape(-1, 3)
     colors = colors.repeat(repeats**2, 1)
@@ -91,7 +100,9 @@ def load_test_data(
     # Gradient of 1/scale is -1/scale², which explodes for extremely small scales
     min_scale = 1e-4
     max_scale = 0.02
-    scales = torch.rand((N, 3), device=device) * (max_scale - min_scale) + min_scale
+    scales = (
+        torch.rand((N, 3), device=device) * (max_scale - min_scale) + min_scale
+    )
 
     quats = F.normalize(torch.randn((N, 4), device=device), dim=-1)
     opacities = torch.rand((N,), device=device)
@@ -99,9 +110,10 @@ def load_test_data(
     return means, quats, scales, opacities, colors, viewmats, Ks, width, height
 
 
-def get_inlier_abserror_mask(actual, expected, *, quantile=None, atol=None, rtol=None):
-    """
-    Create mask for inliers based on error thresholds.
+def get_inlier_abserror_mask(
+    actual, expected, *, quantile=None, atol=None, rtol=None
+):
+    """Create mask for inliers based on error thresholds.
 
     Combines quantile-based filtering with absolute/relative tolerance checks.
     Uses the same condition as torch.testing.assert_close.
@@ -142,8 +154,7 @@ def get_inlier_abserror_mask(actual, expected, *, quantile=None, atol=None, rtol
 
 
 def assert_shape(name: str, t: torch.Tensor, shape: tuple):
-    """
-    Check if the shape of a tensor matches a given shape.
+    """Check if the shape of a tensor matches a given shape.
 
     Args:
         name: Name of the tensor
@@ -194,9 +205,7 @@ def assert_close(
 
 
 def assert_mismatch_ratio(actual, expected, *, max=1e-5):
-    """
-    Assert that the mismatch ratio is less than a given tolerance.
-    """
+    """Assert that the mismatch ratio is less than a given tolerance."""
     if max is None:
         max = 1e-5
 

@@ -13,15 +13,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict
+"""Sorting utilities for Gaussian splats."""
 
 import torch
 from torch import Tensor
 
 
-def sort_splats(splats: Dict[str, Tensor], verbose: bool = True) -> Dict[str, Tensor]:
-    """Sort splats with Parallel Linear Assignment Sorting from the paper `Compact 3D Scene Representation via
-    Self-Organizing Gaussian Grids <https://arxiv.org/pdf/2312.13299>`_.
+def sort_splats(
+    splats: dict[str, Tensor], verbose: bool = True
+) -> dict[str, Tensor]:
+    """Sort splats with Parallel Linear Assignment Sorting from the paper `Compact 3D Scene Representation via Self-Organizing Gaussian Grids <https://arxiv.org/pdf/2312.13299>`_.
 
     .. warning::
         PLAS must installed to use sorting.
@@ -48,7 +49,9 @@ def sort_splats(splats: Dict[str, Tensor], verbose: bool = True) -> Dict[str, Te
     if "sh0" in splats:
         sort_keys.append("sh0")
 
-    params_to_sort = torch.cat([splats[k].reshape(n_gs, -1) for k in sort_keys], dim=-1)
+    params_to_sort = torch.cat(
+        [splats[k].reshape(n_gs, -1) for k in sort_keys], dim=-1
+    )
     shuffled_indices = torch.randperm(
         params_to_sort.shape[0], device=params_to_sort.device
     )

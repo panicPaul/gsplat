@@ -13,15 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Selective Adam optimizer for sparse Gaussian splat parameter updates."""
+
 import torch
 
 from ..cuda._wrapper import adam
 
 
 class SelectiveAdam(torch.optim.Adam):
-    """
-    A custom optimizer that extends the standard Adam optimizer by
-    incorporating selective updates.
+    """A custom optimizer that extends the standard Adam optimizer by incorporating selective updates.
 
     This class is useful for situations where only a subset of parameters
     should be updated at each step, such as in sparse models or in cases where
@@ -39,7 +39,6 @@ class SelectiveAdam(torch.optim.Adam):
         betas (Tuple[float, float]): Coefficients used for computing running averages of gradient and its square (default: (0.9, 0.999)).
 
     Examples:
-
         >>> N = 100
         >>> param = torch.randn(N, requires_grad=True)
         >>> optimizer = SelectiveAdam([param], eps=1e-8, betas=(0.9, 0.999))
@@ -57,10 +56,12 @@ class SelectiveAdam(torch.optim.Adam):
     """
 
     def __init__(self, params, eps, betas):
+        """Initialize SelectiveAdam optimizer."""
         super().__init__(params=params, eps=eps, betas=betas)
 
     @torch.no_grad()
     def step(self, visibility):
+        """Perform a single optimization step with selective updates."""
         N = visibility.numel()
         for group in self.param_groups:
             lr = group["lr"]

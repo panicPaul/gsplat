@@ -13,8 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Base class for Gaussian densification and pruning strategies."""
+
 from dataclasses import dataclass
-from typing import Dict, Union
 
 import torch
 
@@ -29,8 +30,8 @@ class Strategy:
 
     def check_sanity(
         self,
-        params: Union[Dict[str, torch.nn.Parameter], torch.nn.ParameterDict],
-        optimizers: Dict[str, torch.optim.Optimizer],
+        params: dict[str, torch.nn.Parameter] | torch.nn.ParameterDict,
+        optimizers: dict[str, torch.optim.Optimizer],
     ):
         """Sanity check for the parameters and optimizers."""
         trainable_params = set(

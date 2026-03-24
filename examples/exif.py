@@ -17,12 +17,11 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
-from typing import Dict, List, Optional
 
 import piexif  # type: ignore
 
 
-def _extract_shutter_time(exif: Dict) -> Optional[float]:
+def _extract_shutter_time(exif: dict) -> float | None:
     # EXIF tag IDs (decimal)
     TAG_EXPOSURE_TIME = 33434  # ExposureTime (seconds)
     TAG_SHUTTER_SPEED_VALUE = 37377  # ShutterSpeedValue (APEX Tv)
@@ -44,7 +43,7 @@ def _extract_shutter_time(exif: Dict) -> Optional[float]:
     return None
 
 
-def _extract_aperture_fnumber(exif: Dict) -> Optional[float]:
+def _extract_aperture_fnumber(exif: dict) -> float | None:
     # EXIF tag IDs (decimal)
     TAG_FNUMBER = 33437  # FNumber (f-number)
     TAG_APERTURE_VALUE = 37378  # ApertureValue (APEX Av)
@@ -66,7 +65,7 @@ def _extract_aperture_fnumber(exif: Dict) -> Optional[float]:
     return None
 
 
-def _extract_iso(exif: Dict) -> Optional[float]:
+def _extract_iso(exif: dict) -> float | None:
     # EXIF tag IDs (decimal)
     # PhotographicSensitivity / ISOSpeedRatings
     TAG_PHOTOGRAPHIC_SENSITIVITY = 34855
@@ -75,7 +74,7 @@ def _extract_iso(exif: Dict) -> Optional[float]:
     TAG_ISO_SPEED = 34859  # ISOSpeed
     exif_ifd = exif.get("Exif") if isinstance(exif.get("Exif"), dict) else {}
 
-    candidates: List[int] = [
+    candidates: list[int] = [
         TAG_PHOTOGRAPHIC_SENSITIVITY,
         TAG_RECOMMENDED_EXPOSURE_INDEX,
         TAG_STANDARD_OUTPUT_SENSITIVITY,
@@ -91,7 +90,7 @@ def _extract_iso(exif: Dict) -> Optional[float]:
     return None
 
 
-def compute_exposure_from_exif(path: Path) -> Optional[float]:
+def compute_exposure_from_exif(path: Path) -> float | None:
     """Return exposure in EV stops (log2 of relative exposure) or None if unavailable.
 
     Relative exposure is computed as (seconds / f^2 * ISO) then converted via log2.

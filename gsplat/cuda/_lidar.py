@@ -12,16 +12,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from torch import Tensor
 import hashlib
 import math
-from functools import lru_cache
-from dataclasses import dataclass, InitVar
+from dataclasses import InitVar, dataclass
 from enum import Enum
+from functools import lru_cache
 from types import SimpleNamespace
 
 import numpy as np
 import torch
+from torch import Tensor
 
 
 def _tensor_hash(tensor: Tensor) -> int:
@@ -54,7 +54,10 @@ def relative_clock_rotation(
 
 
 def relative_angle(
-    angle_ref: Tensor, angle: Tensor, direction: SpinningDirection, scale: float = 1
+    angle_ref: Tensor,
+    angle: Tensor,
+    direction: SpinningDirection,
+    scale: float = 1,
 ) -> float:
     rel_angle = relative_clock_rotation(angle_ref, angle, direction)
     # Normalize between [0,2*pi*scale)
@@ -101,7 +104,9 @@ class SphericalUnitCoord:
             self.azimuth.shape,
         )
 
-    def to(self, *, dtype: torch.dtype, device: torch.device) -> "SphericalUnitCoord":
+    def to(
+        self, *, dtype: torch.dtype, device: torch.device
+    ) -> "SphericalUnitCoord":
         return SphericalUnitCoord(
             elevation=self.elevation.to(dtype=dtype, device=device),
             azimuth=self.azimuth.to(dtype=dtype, device=device),
@@ -121,7 +126,8 @@ class SphericalUnitCoord:
 
     def reshape(self, *args) -> "SphericalUnitCoord":
         return SphericalUnitCoord(
-            elevation=self.elevation.reshape(*args), azimuth=self.azimuth.reshape(*args)
+            elevation=self.elevation.reshape(*args),
+            azimuth=self.azimuth.reshape(*args),
         )
 
     def __getitem__(self, key) -> "SphericalUnitCoord":
@@ -177,7 +183,7 @@ class SphericalUnitCoord:
 
 @dataclass(kw_only=True, frozen=True)
 class FOV:
-    """Represents a field-of-view with start and span in radians"""
+    """Represents a field-of-view with start and span in radians."""
 
     def __post_init__(self):
         assert self.span >= 0
@@ -193,13 +199,12 @@ class FOV:
     def end(self) -> float:
         if self.direction == SpinningDirection.COUNTER_CLOCKWISE:
             return self.start + self.span
-        else:
-            return self.start - self.span
+        return self.start - self.span
 
 
 @dataclass(frozen=True, kw_only=True)
 class LidarModelParameters:
-    """Represents parameters common to all lidar models"""
+    """Represents parameters common to all lidar models."""
 
     fov_vert_rad: FOV
     fov_horiz_rad: FOV
@@ -209,7 +214,7 @@ class LidarModelParameters:
 
 @dataclass(frozen=True, kw_only=True)
 class SpinningLidarModelParameters(LidarModelParameters):
-    """Represents parameters common to all spinning lidar models"""
+    """Represents parameters common to all spinning lidar models."""
 
     spinning_frequency_hz: float
     spinning_direction: SpinningDirection
@@ -237,7 +242,7 @@ class StructuredSpinningLidarModelParameters(
 class RowOffsetStructuredSpinningLidarModelParameters(
     StructuredSpinningLidarModelParameters
 ):
-    """Represents parameters for a structured spinning lidar model that is using a per-row azimuth-offset (compatible with, e.g., Hesai P128 sensors)"""
+    """Represents parameters for a structured spinning lidar model that is using a per-row azimuth-offset (compatible with, e.g., Hesai P128 sensors)."""
 
     # elevation angle of each row,
     # constant for each column [clockwise around y axis, relative to x axis] [(n_rows,) radians]
@@ -266,7 +271,9 @@ class RowOffsetStructuredSpinningLidarModelParameters(
 
         object.__setattr__(self, "row_elevations_rad", row_elevations_rad)
         object.__setattr__(self, "column_azimuths_rad", column_azimuths_rad)
-        object.__setattr__(self, "row_azimuth_offsets_rad", row_azimuth_offsets_rad)
+        object.__setattr__(
+            self, "row_azimuth_offsets_rad", row_azimuth_offsets_rad
+        )
 
         params = SimpleNamespace()
         params.fov_vert_rad = self._compute_fov_vert_rad()
@@ -303,7 +310,9 @@ class RowOffsetStructuredSpinningLidarModelParameters(
             "Row elevation angles must be sorted in descending order (cw)"
         )
         assert torch.all(
-            ~angle_range_wrap_around(self.row_elevations_rad[0], self.row_elevations_rad)
+            ~angle_range_wrap_around(
+                self.row_elevations_rad[0], self.row_elevations_rad
+            )
         ), "Row elevation angles must not wrap around the start element"
 
         # Check order of column azimuth angles is consistent with spinning direction
@@ -344,25 +353,35 @@ class RowOffsetStructuredSpinningLidarModelParameters(
         )
 
     def __eq__(self, other) -> bool:
-        if not isinstance(other, RowOffsetStructuredSpinningLidarModelParameters):
+        if not isinstance(
+            other, RowOffsetStructuredSpinningLidarModelParameters
+        ):
             return NotImplemented
-        else:
-            return (
-                super().__eq__(other)
-                and torch.equal(self.row_elevations_rad, other.row_elevations_rad)
-                and torch.equal(self.column_azimuths_rad, other.column_azimuths_rad)
-                and torch.equal(
-                    self.row_azimuth_offsets_rad, other.row_azimuth_offsets_rad
-                )
+        return (
+            super().__eq__(other)
+            and torch.equal(
+                self.row_elevations_rad, other.row_elevations_rad
             )
+            and torch.equal(
+                self.column_azimuths_rad, other.column_azimuths_rad
+            )
+            and torch.equal(
+                self.row_azimuth_offsets_rad, other.row_azimuth_offsets_rad
+            )
+        )
 
     def create_elements(self) -> SphericalUnitCoord:
         """Create all element indices [relative to the static model].
+
         Element: each elevation/azimuth pair in the quantized grid, i.e. each cell.
-        Flat order is row-major (flat_idx = row * n_columns + col)
+        Flat order is row-major (flat_idx = row * n_columns + col).
         """
-        idxelevations = torch.arange(self.n_rows, device=self.device, dtype=torch.int32)
-        idxazimuths = torch.arange(self.n_columns, device=self.device, dtype=torch.int32)
+        idxelevations = torch.arange(
+            self.n_rows, device=self.device, dtype=torch.int32
+        )
+        idxazimuths = torch.arange(
+            self.n_columns, device=self.device, dtype=torch.int32
+        )
 
         return SphericalUnitCoord(
             elevation=torch.repeat_interleave(idxelevations, self.n_columns),
@@ -370,8 +389,7 @@ class RowOffsetStructuredSpinningLidarModelParameters(
         )
 
     def _compute_fov_vert_rad(self) -> FOV:
-        """Returns the vertical field-of-view of the lidar model (starting at first element) in the requested dtype precision"""
-
+        """Returns the vertical field-of-view of the lidar model (starting at first element) in the requested dtype precision."""
         start_rad = self.row_elevations_rad[0].item()
         span_rad = relative_angle(
             start_rad, self.row_elevations_rad[-1], SpinningDirection.CLOCKWISE
@@ -384,12 +402,15 @@ class RowOffsetStructuredSpinningLidarModelParameters(
             direction=SpinningDirection.CLOCKWISE,
         )
 
-    def _compute_fov_horiz_rad(self, spinning_direction: SpinningDirection) -> FOV:
-        """Returns the horizontal field-of-view of the lidar model (starting at first element) in the requested dtype precision"""
-
+    def _compute_fov_horiz_rad(
+        self, spinning_direction: SpinningDirection
+    ) -> FOV:
+        """Returns the horizontal field-of-view of the lidar model (starting at first element) in the requested dtype precision."""
         # Reconstruct first and last (wrapped) element azimuths per elevation once to obtain FoV bounds
         azimuth_extremes_rad = (
-            self.column_azimuths_rad[None, [0, self.column_azimuths_rad.shape[0] - 1]]
+            self.column_azimuths_rad[
+                None, [0, self.column_azimuths_rad.shape[0] - 1]
+            ]
             + self.row_azimuth_offsets_rad[:, None]
         )
 
@@ -406,18 +427,24 @@ class RowOffsetStructuredSpinningLidarModelParameters(
             span_rad = 2 * torch.pi
         else:
             span_rad = (
-                relative_angle(start_rad, end_rad, spinning_direction).max().item()
+                relative_angle(start_rad, end_rad, spinning_direction)
+                .max()
+                .item()
             )
 
         return FOV(
-            start=float(start_rad), span=float(span_rad), direction=spinning_direction
+            start=float(start_rad),
+            span=float(span_rad),
+            direction=spinning_direction,
         )
 
     def elements_to_sensor_angles(
         self, elements: SphericalUnitCoord
     ) -> SphericalUnitCoord:
         return SphericalUnitCoord(
-            elevation=normalize_elevation(self.row_elevations_rad[elements.elevation]),
+            elevation=normalize_elevation(
+                self.row_elevations_rad[elements.elevation]
+            ),
             azimuth=normalize_azimuth(
                 self.column_azimuths_rad[elements.azimuth]
                 + self.row_azimuth_offsets_rad[elements.elevation]
@@ -453,18 +480,22 @@ class LidarTiling:
             self.cdf_dense_ray_mask.dtype
         )
         assert self.cdf_dense_ray_mask.ndim == 2, self.cdf_dense_ray_mask.ndim
-        assert self.cdf_dense_ray_mask.shape[-1] == self.cdf_elevation.shape[0], (
-            f"{self.cdf_dense_ray_mask.shape=} {self.cdf_elevation.shape=}"
-        )
+        assert (
+            self.cdf_dense_ray_mask.shape[-1] == self.cdf_elevation.shape[0]
+        ), f"{self.cdf_dense_ray_mask.shape=} {self.cdf_elevation.shape=}"
 
         assert self.tiles_pack_info.ndim == 2, self.tiles_pack_info.ndim
         assert self.tiles_pack_info.shape == (
             self.n_bins_azimuth * self.n_bins_elevation,
             2,
         ), self.tiles_pack_info.shape
-        assert self.tiles_pack_info.dtype == torch.int32, self.tiles_pack_info.dtype
+        assert self.tiles_pack_info.dtype == torch.int32, (
+            self.tiles_pack_info.dtype
+        )
 
-        assert self.tiles_to_elements_map.ndim == 2, self.tiles_to_elements_map.ndim
+        assert self.tiles_to_elements_map.ndim == 2, (
+            self.tiles_to_elements_map.ndim
+        )
         assert self.tiles_to_elements_map.dtype == torch.int32, (
             self.tiles_to_elements_map.dtype
         )
@@ -486,7 +517,7 @@ class LidarTiling:
 class RowOffsetStructuredSpinningLidarModelParametersExt(
     RowOffsetStructuredSpinningLidarModelParameters
 ):
-    """Lidar camera parameters extended with acceleration structures"""
+    """Lidar camera parameters extended with acceleration structures."""
 
     angles_to_columns_map: Tensor
     tiling: LidarTiling
@@ -502,17 +533,23 @@ class RowOffsetStructuredSpinningLidarModelParametersExt(
         super().__init__(**kwargs)
 
         assert (
-            self.angles_to_columns_map.shape[0] % self.row_elevations_rad.shape[0] == 0
+            self.angles_to_columns_map.shape[0]
+            % self.row_elevations_rad.shape[0]
+            == 0
         )
         assert (
-            self.angles_to_columns_map.shape[1] % self.column_azimuths_rad.shape[0] == 0
+            self.angles_to_columns_map.shape[1]
+            % self.column_azimuths_rad.shape[0]
+            == 0
         )
         a2cmap_resfactor = (
-            self.angles_to_columns_map.shape[0] / self.row_elevations_rad.shape[0]
+            self.angles_to_columns_map.shape[0]
+            / self.row_elevations_rad.shape[0]
         )
         assert (
             a2cmap_resfactor
-            == self.angles_to_columns_map.shape[1] / self.column_azimuths_rad.shape[0]
+            == self.angles_to_columns_map.shape[1]
+            / self.column_azimuths_rad.shape[0]
         )
 
 
@@ -520,7 +557,9 @@ class RowOffsetStructuredSpinningLidarModelParametersExt(
 
 
 def relative_sensor_angles(
-    lidar: SpinningLidarModelParameters, coord: SphericalUnitCoord, scale: float = 1
+    lidar: SpinningLidarModelParameters,
+    coord: SphericalUnitCoord,
+    scale: float = 1,
 ) -> SphericalUnitCoord:
     return SphericalUnitCoord(
         elevation=relative_clock_rotation(
@@ -538,7 +577,9 @@ def relative_sensor_angles(
 
 
 def valid_sensor_angles(
-    lidar: SpinningLidarModelParameters, coord: SphericalUnitCoord, scale: float = 1
+    lidar: SpinningLidarModelParameters,
+    coord: SphericalUnitCoord,
+    scale: float = 1,
 ) -> Tensor:
     # Account for accumulated numerical errors via some epsilon in FOV check (1x eps on the start of the FOV)
     fov_vert_start_adj = lidar.fov_vert_rad.start + lidar.fov_eps_rad
@@ -553,23 +594,30 @@ def valid_sensor_angles(
         fov_vert_start_adj * scale, coord.elevation, SpinningDirection.CLOCKWISE
     )
     rel_azimuth = relative_angle(
-        fov_horiz_start_adj * scale, coord.azimuth, lidar.spinning_direction, scale
+        fov_horiz_start_adj * scale,
+        coord.azimuth,
+        lidar.spinning_direction,
+        scale,
     )
 
     # Also account for accumulated numerical errors via some epsilon in FOV check
     # (using 2x eps as 1x eps is "inherited" from the start of the FOV in the relative angles,
     #  so effectively this checks 1x eps on the end of the FOV)
     return (
-        rel_elevation <= (lidar.fov_vert_rad.span + lidar.fov_eps_rad * 2) * scale
-    ) & (rel_azimuth <= (lidar.fov_horiz_rad.span + lidar.fov_eps_rad * 2) * scale)
+        rel_elevation
+        <= (lidar.fov_vert_rad.span + lidar.fov_eps_rad * 2) * scale
+    ) & (
+        rel_azimuth
+        <= (lidar.fov_horiz_rad.span + lidar.fov_eps_rad * 2) * scale
+    )
 
 
 @dataclass
 class SensorRayReturn:
-    """
-    Contains
-        - sensor rays [float] (n,3)
-        - valid_flag [bool] (n,)
+    """Contains sensor ray data.
+
+    - sensor rays [float] (n,3)
+    - valid_flag [bool] (n,)
     """
 
     sensor_rays: torch.Tensor
@@ -580,7 +628,6 @@ def sensor_angles_to_rays(
     lidar: SpinningLidarModelParameters, sensor_angles: SphericalUnitCoord
 ) -> SensorRayReturn:
     """Computes the sensor rays for elevation/azimuth angles."""
-
     sensor_angles = sensor_angles.to(device=lidar.device, dtype=lidar.dtype)
 
     # Check if relative sensor angles are within the FOV of the sensor
@@ -607,7 +654,6 @@ def compute_angles_to_columns_map(
     dtype: torch.dtype = torch.int32,
 ):
     """Computes angles to column map as a 2D array of shape resolution_factor * (n_rows, n_columns)."""
-
     # The idea here is to create a regular high-resolution grid spanning the whole FOV
     # and store in each grid cell the projected azimuth of the closest lidar ray to it.
     # The lidar (unitary) ray chosen is the one closest (L^2)
@@ -661,7 +707,9 @@ def compute_angles_to_columns_map(
     elements = lidar.create_elements()
     sensor_angles = lidar.elements_to_sensor_angles(elements).reshape(-1)
 
-    assert sensor_angles.shape == (lidar.n_rows * lidar.n_columns,), sensor_angles.shape
+    assert sensor_angles.shape == (lidar.n_rows * lidar.n_columns,), (
+        sensor_angles.shape
+    )
 
     # Now convert the sensor angles to unit rays.
     sensor_rays = sensor_angles_to_rays(lidar, sensor_angles)
@@ -674,9 +722,13 @@ def compute_angles_to_columns_map(
     # TODO: this is quite slow and should be moved to CUDA.
     #       We can get away with it for now because we're caching the results,
     #       and usually this function would be called only once per lidar model needed.
-    from scipy import spatial as scipy_spatial  # requires pip install gsplat[lidar]
+    from scipy import (
+        spatial as scipy_spatial,  # requires pip install gsplat[lidar]
+    )
 
-    kdtree = scipy_spatial.cKDTree(sensor_rays.sensor_rays.contiguous().cpu().numpy())  # ty:ignore[unresolved-attribute]
+    kdtree = scipy_spatial.cKDTree(
+        sensor_rays.sensor_rays.contiguous().cpu().numpy()
+    )  # ty:ignore[unresolved-attribute]
     _, idxs = kdtree.query(grid_rays.sensor_rays.contiguous().cpu().numpy())
     idxs = torch.from_numpy(idxs).to(device=lidar.device, dtype=torch.int32)
 
@@ -751,8 +803,12 @@ def angles_to_tile_indices(
     relative_angles = relative_sensor_angles(parameters, angles)
 
     normalized_angles = SphericalUnitCoord(
-        elevation=relative_angles.elevation / parameters.fov_vert_rad.span * resolution,
-        azimuth=relative_angles.azimuth / parameters.fov_horiz_rad.span * n_bins_azimuth,
+        elevation=relative_angles.elevation
+        / parameters.fov_vert_rad.span
+        * resolution,
+        azimuth=relative_angles.azimuth
+        / parameters.fov_horiz_rad.span
+        * n_bins_azimuth,
     )
 
     # compute the azimuth tile indices directly
@@ -775,8 +831,7 @@ def compute_tiles_to_elements_map(
     densification_factor_azimuth: float,
     cdf_elevation: torch.Tensor,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Computes the mapping from tiles to elements for the given lidar model and parameters"""
-
+    """Compute the mapping from tiles to elements for the given lidar model and parameters."""
     # compute the number of bins for elevation
     n_bins_elevation = cdf_elevation[-1].item()
     assert n_bins_elevation.is_integer(), "CDF elevation must be an integer"
@@ -840,7 +895,10 @@ def compute_histogram_equalization(
     # TODO: use parameters.fov_eps_rad
     fov_eps_rad = 2 * torch.finfo(torch.float32).eps
     ranges_azimuth = (-fov_eps_rad, parameters.fov_horiz_rad.span + fov_eps_rad)
-    ranges_elevation = (-fov_eps_rad, parameters.fov_vert_rad.span + fov_eps_rad)
+    ranges_elevation = (
+        -fov_eps_rad,
+        parameters.fov_vert_rad.span + fov_eps_rad,
+    )
     assert torch.all(
         (angles.elevation >= ranges_elevation[0])
         & (angles.elevation <= ranges_elevation[1])
@@ -849,7 +907,8 @@ def compute_histogram_equalization(
     )
 
     assert torch.all(
-        (angles.azimuth >= ranges_azimuth[0]) & (angles.azimuth <= ranges_azimuth[1])
+        (angles.azimuth >= ranges_azimuth[0])
+        & (angles.azimuth <= ranges_azimuth[1])
     ), (
         f"azimuths are out of bounds, {angles.azimuth.min()} < {ranges_azimuth[0]},  {angles.azimuth.max()} > {ranges_azimuth[1]}"
     )
@@ -865,7 +924,9 @@ def compute_histogram_equalization(
         if isinstance(bins, torch.Tensor):
             bins = bins.cpu().numpy()
         hist, *others = np.histogram(data.cpu().numpy(), bins=bins, range=range)
-        return torch.tensor(hist, device=data.device, dtype=torch.int32), *others
+        return torch.tensor(
+            hist, device=data.device, dtype=torch.int32
+        ), *others
 
     # 1. compute the prefix sum of data
     hist, _ = compute_hist1d(
@@ -885,10 +946,14 @@ def compute_histogram_equalization(
             edges_list.append(i)
             curr += 1
     edges_list[-1] = len(cdf_elevation) - 1
-    edges = torch.tensor(edges_list, device=parameters.device, dtype=torch.float32)
+    edges = torch.tensor(
+        edges_list, device=parameters.device, dtype=torch.float32
+    )
 
     # recompute the histograms
-    edges_elevation = edges / resolution_elevation * parameters.fov_vert_rad.span
+    edges_elevation = (
+        edges / resolution_elevation * parameters.fov_vert_rad.span
+    )
     hist_elevations, _ = compute_hist1d(
         angles.elevation, bins=edges_elevation, range=ranges_elevation
     )

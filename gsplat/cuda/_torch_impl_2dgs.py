@@ -15,13 +15,12 @@
 # limitations under the License.
 
 import math
-from typing import Optional, Tuple
 
 import torch
 from torch import Tensor
 
-from gsplat.cuda._math import _quat_scale_to_matrix
 from gsplat.cuda._constants import MAX_ALPHA
+from gsplat.cuda._math import _quat_scale_to_matrix
 
 
 def _fully_fused_projection_2dgs(
@@ -35,8 +34,8 @@ def _fully_fused_projection_2dgs(
     near_plane: float = 0.01,
     far_plane: float = 1e10,
     eps: float = 0,
-) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
-    """PyTorch implementation of `gsplat.cuda._wrapper.fully_fused_projection_2dgs()`
+) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+    """PyTorch implementation of :func:`gsplat.cuda._wrapper.fully_fused_projection_2dgs`.
 
     .. note::
 
@@ -58,7 +57,9 @@ def _fully_fused_projection_2dgs(
         torch.einsum("...cij,...nj->...cni", R_cw, means) + t_cw[..., None, :]
     )  # [..., C, N, 3]
     RS_wl = _quat_scale_to_matrix(quats, scales)
-    RS_cl = torch.einsum("...cij,...njk->...cnik", R_cw, RS_wl)  # [..., C, N, 3, 3]
+    RS_cl = torch.einsum(
+        "...cij,...njk->...cnik", R_cw, RS_wl
+    )  # [..., C, N, 3, 3]
 
     # compute normals
     normals = RS_cl[..., 2]  # [..., C, N, 3]
@@ -68,7 +69,9 @@ def _fully_fused_projection_2dgs(
     normals *= multiplier
 
     # ray transform matrix, omitting the z rotation
-    T_cl = torch.cat([RS_cl[..., :2], means_c[..., None]], dim=-1)  # [..., C, N, 3, 3]
+    T_cl = torch.cat(
+        [RS_cl[..., :2], means_c[..., None]], dim=-1
+    )  # [..., C, N, 3, 3]
     T_sl = torch.einsum(
         "...cij,...cnjk->...cnik", Ks[..., :3, :3], T_cl
     )  # [..., C, N, 3, 3]
@@ -80,7 +83,9 @@ def _fully_fused_projection_2dgs(
     test = torch.tensor([1.0, 1.0, -1.0], device=means.device).expand(
         batch_dims + (1, 1, 3)
     )
-    d = (M[..., 2] * M[..., 2] * test).sum(dim=-1, keepdim=True)  # [..., C, N, 1]
+    d = (M[..., 2] * M[..., 2] * test).sum(
+        dim=-1, keepdim=True
+    )  # [..., C, N, 1]
     valid = torch.abs(d) > eps
     f = torch.where(valid, test / d, torch.zeros_like(test)).unsqueeze(
         -1
@@ -119,7 +124,7 @@ def accumulate_2dgs(
     image_ids: Tensor,  # [M]
     image_width: int,
     image_height: int,
-) -> Tuple[Tensor, Tensor, Tensor]:
+) -> tuple[Tensor, Tensor, Tensor]:
     """Alpha compositing for 2DGS.
 
     .. warning::
@@ -145,7 +150,6 @@ def accumulate_2dgs(
         - **alphas**: Accumulated opacities. [..., image_height, image_width, 1]
         - **normals**: Accumulated normals. [..., image_height, image_width, 3]
     """
-
     try:
         from nerfacc import accumulate_along_rays, render_weight_from_alpha
     except ImportError:
@@ -223,7 +227,7 @@ def _rasterize_to_pixels_2dgs(
     tile_size: int,
     isect_offsets: Tensor,  # [..., tile_height, tile_width]
     flatten_ids: Tensor,  # [n_isects]
-    backgrounds: Optional[Tensor] = None,  # [..., channels]
+    backgrounds: Tensor | None = None,  # [..., channels]
     batch_per_iter: int = 100,
 ):
     """Pytorch implementation of `gsplat.cuda._wrapper.rasterize_to_pixels_2dgs()`.
@@ -321,7 +325,9 @@ def _rasterize_to_pixels_2dgs(
         )
         render_colors = render_colors + renders_step * transmittances[..., None]
         render_alphas = render_alphas + accs_step * transmittances[..., None]
-        render_normals = render_normals + renders_normal_step * transmittances[..., None]
+        render_normals = (
+            render_normals + renders_normal_step * transmittances[..., None]
+        )
 
     render_alphas = render_alphas
     if backgrounds is not None:

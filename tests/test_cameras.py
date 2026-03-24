@@ -14,21 +14,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Test C++ camera models (primary) against PyTorch reference.
+"""Test C++ camera models (primary) against PyTorch reference.
 
 Validates correctness of C++ implementations by comparing output
 to PyTorch reference implementations for all 5 methods.
 """
 
-import numpy as np
+import math
+import re
+from itertools import chain, product
+from types import SimpleNamespace
+
 import pytest
 import torch
-import re
-import math
-from itertools import product, chain
-from types import SimpleNamespace
-from dataclasses import dataclass
 
 if not torch.cuda.is_available():
     pytest.skip("CUDA required for camera model tests", allow_module_level=True)
@@ -38,35 +36,38 @@ from gsplat.cuda._backend import _C
 if _C is None:
     pytest.skip("gsplat CUDA extension not available", allow_module_level=True)
 
-from gsplat._helper import expand_named_params
-from gsplat.cuda._torch_cameras import (  # PyTorch reference
-    _BaseCameraModel,
-    _PerfectPinholeCameraModel,
-    _OpenCVPinholeCameraModel,
-    _OpenCVFisheyeCameraModel,
-    _FThetaCameraModel,
-)
-from gsplat.cuda._torch_lidars import (  # PyTorch reference
-    _RowOffsetStructuredSpinningLidarModel,
-)
-from gsplat._helper import assert_mismatch_ratio, assert_close
-from gsplat.cuda._wrapper import (
-    RollingShutterType,
-    FThetaPolynomialType,
-    FThetaCameraDistortionParameters,
-    create_camera_model,
-    SpinningDirection,
-)
 from gsplat import (
-    compute_lidar_angles_to_columns_map,
-    compute_lidar_tiling,
     RowOffsetStructuredSpinningLidarModelParameters,
     RowOffsetStructuredSpinningLidarModelParametersExt,
+    compute_lidar_angles_to_columns_map,
+    compute_lidar_tiling,
+)
+from gsplat._helper import (
+    assert_close,
+    assert_mismatch_ratio,
+    expand_named_params,
 )
 from gsplat.cuda._math import (
     _quat_multiply,
     _safe_normalize,
     compute_inverse_polynomial,
+)
+from gsplat.cuda._torch_cameras import (  # PyTorch reference
+    _BaseCameraModel,
+    _FThetaCameraModel,
+    _OpenCVFisheyeCameraModel,
+    _OpenCVPinholeCameraModel,
+    _PerfectPinholeCameraModel,
+)
+from gsplat.cuda._torch_lidars import (  # PyTorch reference
+    _RowOffsetStructuredSpinningLidarModel,
+)
+from gsplat.cuda._wrapper import (
+    FThetaCameraDistortionParameters,
+    FThetaPolynomialType,
+    RollingShutterType,
+    SpinningDirection,
+    create_camera_model,
 )
 
 SEED = 42
@@ -94,7 +95,9 @@ ROLLING_SHUTTER_TYPES = [
     ("global", RollingShutterType.GLOBAL),
 ]
 
-DEFAULT_ROLLING_SHUTTER_TYPE = [("global", RollingShutterType.ROLLING_LEFT_TO_RIGHT)]
+DEFAULT_ROLLING_SHUTTER_TYPE = [
+    ("global", RollingShutterType.ROLLING_LEFT_TO_RIGHT)
+]
 
 # ==================================================
 # Routines to parse camera model definition strings
@@ -123,8 +126,7 @@ def parse_camera(
     device: torch.device = torch.device("cuda"),
     seed: int = 42,
 ):
-    """
-    Parse camera model definition string and generate test parameters.
+    """Parse camera model definition string and generate test parameters.
 
     Args:
         camera_def: Camera model definitionstring in format "model[params]"
@@ -138,7 +140,6 @@ def parse_camera(
     Returns:
         Dictionary with camera constructor parameters
     """
-
     # Parse "model[params]" format
     match = re.match(r"(\w+)(?:\[([^\]]+)\])?", camera_def)
     if not match:
@@ -171,15 +172,21 @@ def parse_camera(
         # Wrap lidar-specific params into a RowOffsetStructuredSpinningLidarModelParametersExt object
         return {
             "camera_model": model_type,
-            "lidar_coeffs": RowOffsetStructuredSpinningLidarModelParametersExt(**params),
+            "lidar_coeffs": RowOffsetStructuredSpinningLidarModelParametersExt(
+                **params
+            ),
         }
     else:
         resolution = torch.tensor([width, height], dtype=torch.float32).cuda()
         principal_points = (
-            torch.randn(*batch_dims, 2, dtype=torch.float32, device=device) * 0.05 + 0.5
+            torch.randn(*batch_dims, 2, dtype=torch.float32, device=device)
+            * 0.05
+            + 0.5
         ) * resolution
         params["principal_points"] = principal_points
-        params["rs_type"] = rs_type.to_cpp() if hasattr(rs_type, "to_cpp") else rs_type
+        params["rs_type"] = (
+            rs_type.to_cpp() if hasattr(rs_type, "to_cpp") else rs_type
+        )
         params["width"] = width
         params["height"] = height
         params["camera_model"] = model_type
@@ -187,16 +194,23 @@ def parse_camera(
 
 
 def parse_perfect_pinhole_camera(
-    param_str: str, batch_dims: tuple, width: int, height: int, device: torch.device
+    param_str: str,
+    batch_dims: tuple,
+    width: int,
+    height: int,
+    device: torch.device,
 ):
     """Parse parameters for perfect pinhole camera (no distortion)."""
-
     # Generate focal_lengths with normal FOV (40-90 degrees)
-    fov_deg = 40.0 + torch.rand(batch_dims, device=device, dtype=torch.float32) * 50.0
+    fov_deg = (
+        40.0 + torch.rand(batch_dims, device=device, dtype=torch.float32) * 50.0
+    )
     fov_rad = fov_deg * (math.pi / 180.0)
     focal_length_x = _compute_focal_length(width, fov_rad)
 
-    asymmetry = 0.98 + torch.rand(batch_dims, device=device, dtype=torch.float32) * 0.04
+    asymmetry = (
+        0.98 + torch.rand(batch_dims, device=device, dtype=torch.float32) * 0.04
+    )
     focal_length_y = focal_length_x * asymmetry
     focal_lengths = torch.stack([focal_length_x, focal_length_y], dim=-1)
 
@@ -204,17 +218,24 @@ def parse_perfect_pinhole_camera(
 
 
 def parse_opencv_pinhole_camera(
-    param_str: str, batch_dims: tuple, width: int, height: int, device: torch.device
+    param_str: str,
+    batch_dims: tuple,
+    width: int,
+    height: int,
+    device: torch.device,
 ):
     """Parse parameters for OpenCV pinhole camera with distortion."""
-
     # Generate focal_lengths with normal FOV (40-90 degrees)
-    fov_deg = 40.0 + torch.rand(batch_dims, device=device, dtype=torch.float32) * 50.0
+    fov_deg = (
+        40.0 + torch.rand(batch_dims, device=device, dtype=torch.float32) * 50.0
+    )
     fov_rad = fov_deg * (math.pi / 180.0)
     focal_length_x = _compute_focal_length(width, fov_rad)
 
     # 4% asymmetry
-    asymmetry = 0.98 + torch.rand(batch_dims, device=device, dtype=torch.float32) * 0.04
+    asymmetry = (
+        0.98 + torch.rand(batch_dims, device=device, dtype=torch.float32) * 0.04
+    )
     focal_length_y = focal_length_x * asymmetry
     focal_lengths = torch.stack([focal_length_x, focal_length_y], dim=-1)
 
@@ -224,7 +245,8 @@ def parse_opencv_pinhole_camera(
     if k_match := re.search(r"k(\d+)", param_str):
         n_radial = int(k_match.group(1))
         params["radial_coeffs"] = (
-            torch.randn(*batch_dims, n_radial, dtype=torch.float32).cuda() * 0.01
+            torch.randn(*batch_dims, n_radial, dtype=torch.float32).cuda()
+            * 0.01
         )
 
     if "tangential" in param_str:
@@ -241,17 +263,25 @@ def parse_opencv_pinhole_camera(
 
 
 def parse_opencv_fisheye_camera(
-    param_str: str, batch_dims: tuple, width: int, height: int, device: torch.device
+    param_str: str,
+    batch_dims: tuple,
+    width: int,
+    height: int,
+    device: torch.device,
 ):
     """Parse parameters for OpenCV fisheye camera."""
     import re
 
     # Generate focal_lengths with wide FOV (90-180 degrees)
-    fov_deg = 90.0 + torch.rand(batch_dims, device=device, dtype=torch.float32) * 90.0
+    fov_deg = (
+        90.0 + torch.rand(batch_dims, device=device, dtype=torch.float32) * 90.0
+    )
     fov_rad = fov_deg * (math.pi / 180.0)
     focal_length_x = _compute_focal_length(width, fov_rad)
 
-    asymmetry = 0.98 + torch.rand(batch_dims, device=device, dtype=torch.float32) * 0.04
+    asymmetry = (
+        0.98 + torch.rand(batch_dims, device=device, dtype=torch.float32) * 0.04
+    )
     focal_length_y = focal_length_x * asymmetry
 
     focal_lengths = torch.stack([focal_length_x, focal_length_y], dim=-1)
@@ -261,7 +291,9 @@ def parse_opencv_fisheye_camera(
     if k_match := re.search(r"k(\d+)", param_str):
         n_radial = int(k_match.group(1))
 
-    radial_coeffs = torch.randn(*batch_dims, n_radial, dtype=torch.float32).cuda() * 0.01
+    radial_coeffs = (
+        torch.randn(*batch_dims, n_radial, dtype=torch.float32).cuda() * 0.01
+    )
 
     return {
         "focal_lengths": focal_lengths,
@@ -270,10 +302,13 @@ def parse_opencv_fisheye_camera(
 
 
 def parse_ftheta_camera(
-    param_str: str, batch_dims: tuple, width: int, height: int, device: torch.device
+    param_str: str,
+    batch_dims: tuple,
+    width: int,
+    height: int,
+    device: torch.device,
 ):
     """Parse parameters for FTheta camera model."""
-
     # Generate focal_lengths with wide FOV (90-180 degrees)
     fov_deg = 90.0 + torch.rand(1, dtype=torch.float32) * 90.0
     fov_rad = fov_deg * (math.pi / 180.0)
@@ -389,10 +424,13 @@ def parse_ftheta_camera(
 
 
 def parse_lidar_camera(
-    param_str: str, batch_dims: tuple, width: int, height: int, device: torch.device
+    param_str: str,
+    batch_dims: tuple,
+    width: int,
+    height: int,
+    device: torch.device,
 ):
     """Parse parameters for lidar camera model."""
-
     params = SimpleNamespace()
 
     sensor_name = param_str
@@ -458,9 +496,13 @@ def parse_lidar_camera(
         torch.rand(n_rows, dtype=torch.float32, device=device) - 0.5
     ) * 0.2
 
-    lidar_params = RowOffsetStructuredSpinningLidarModelParameters(**vars(params))
+    lidar_params = RowOffsetStructuredSpinningLidarModelParameters(
+        **vars(params)
+    )
 
-    params.angles_to_columns_map = compute_lidar_angles_to_columns_map(lidar_params)
+    params.angles_to_columns_map = compute_lidar_angles_to_columns_map(
+        lidar_params
+    )
     params.tiling = compute_lidar_tiling(
         lidar_params,
         n_bins_elevation=16,
@@ -521,8 +563,9 @@ def image_points(batch_dims, image_dims, ref_camera):
             )
 
         # Elevation decreases, always clockwise
-        elevation = params.fov_vert_rad.start - params.fov_vert_rad.span * torch.rand(
-            *shape, device=device
+        elevation = (
+            params.fov_vert_rad.start
+            - params.fov_vert_rad.span * torch.rand(*shape, device=device)
         )
 
         # Scale to image point space
@@ -584,7 +627,6 @@ def pose_start(batch_dims, ref_camera, rs_type):
 @pytest.fixture
 def pose_end(batch_dims, pose_start, rs_type, ref_camera):
     """Generate realistic end pose for rolling shutter testing."""
-
     torch.manual_seed(SEED)
 
     # Special case: GLOBAL shutter has no motion during instantaneous exposure
@@ -604,7 +646,9 @@ def pose_end(batch_dims, pose_start, rs_type, ref_camera):
     # Rotation angle during rolling shutter readout, 2 degrees max
     # Translation delta: max 10% focal length
     # TODO: these should be dependent on the camera's focal length and image dimensions!
-    angle_delta = (torch.rand(*shape, 1, device=device) - 0.5) * 2 * torch.pi / 180
+    angle_delta = (
+        (torch.rand(*shape, 1, device=device) - 0.5) * 2 * torch.pi / 180
+    )
     translation_delta = (
         (torch.randn(*shape, 3, device=device) - 0.5)
         * ref_camera.focal_lengths[..., 1:2]
@@ -635,7 +679,12 @@ def test_camera(camera_model, batch_dims, image_dims, rs_type):
     """Create C++ camera (primary implementation)"""
     height, width = image_dims
     params = parse_camera(
-        camera_model, batch_dims, width=width, height=height, rs_type=rs_type, seed=SEED
+        camera_model,
+        batch_dims,
+        width=width,
+        height=height,
+        rs_type=rs_type,
+        seed=SEED,
     )
 
     return create_camera_model(**params)
@@ -646,7 +695,12 @@ def ref_camera(camera_model, batch_dims, image_dims, rs_type):
     """Create PyTorch reference camera"""
     height, width = image_dims
     params = parse_camera(
-        camera_model, batch_dims, width=width, height=height, rs_type=rs_type, seed=SEED
+        camera_model,
+        batch_dims,
+        width=width,
+        height=height,
+        rs_type=rs_type,
+        seed=SEED,
     )
 
     return _BaseCameraModel.create(**params)
@@ -685,7 +739,9 @@ def camera(request, test_camera, ref_camera):
                     for lidar_model in CAMERA_MODELS
                     if "lidar" in lidar_model
                 ],  # camera_model
-                [()],  # no batch dims (lidar currently doesn't support batched cameras
+                [
+                    ()
+                ],  # no batch dims (lidar currently doesn't support batched cameras
             ),
         )
     ],
@@ -695,13 +751,17 @@ def camera(request, test_camera, ref_camera):
     "rs_type", expand_named_params(DEFAULT_ROLLING_SHUTTER_TYPE)
 )  # this is ignored for lidars
 class TestCameraModels:
-    """
-    Validate C++ camera models against PyTorch reference.
-    """
+    """Validate C++ camera models against PyTorch reference."""
 
-    def test_camera_ray_to_image_point(self, camera_rays, test_camera, ref_camera):
-        test_imgpt, test_valid = test_camera.camera_ray_to_image_point(camera_rays, 0.0)
-        ref_imgpt, ref_valid = ref_camera.camera_ray_to_image_point(camera_rays, 0.0)
+    def test_camera_ray_to_image_point(
+        self, camera_rays, test_camera, ref_camera
+    ):
+        test_imgpt, test_valid = test_camera.camera_ray_to_image_point(
+            camera_rays, 0.0
+        )
+        ref_imgpt, ref_valid = ref_camera.camera_ray_to_image_point(
+            camera_rays, 0.0
+        )
 
         all_valid = test_valid & ref_valid
         assert all_valid.any(), "No valid points found"
@@ -723,7 +783,9 @@ class TestCameraModels:
             atol, rtol = 5e-03, 5e-03
         else:  # Fallback
             atol, rtol = None, None
-        assert_close(test_imgpt[all_valid], ref_imgpt[all_valid], atol=atol, rtol=rtol)
+        assert_close(
+            test_imgpt[all_valid], ref_imgpt[all_valid], atol=atol, rtol=rtol
+        )
 
         # Validity mismatch tolerance by camera type (ordered by decreasing tolerance)
         # Values set ~20% above observed maximums for tight margin
@@ -743,8 +805,12 @@ class TestCameraModels:
 
         assert_mismatch_ratio(test_valid, ref_valid, max=validity_tol)
 
-    def test_image_point_to_camera_ray(self, image_points, test_camera, ref_camera):
-        test_rays, test_valid = test_camera.image_point_to_camera_ray(image_points)
+    def test_image_point_to_camera_ray(
+        self, image_points, test_camera, ref_camera
+    ):
+        test_rays, test_valid = test_camera.image_point_to_camera_ray(
+            image_points
+        )
         ref_rays, ref_valid = ref_camera.image_point_to_camera_ray(image_points)
 
         all_valid = test_valid & ref_valid
@@ -767,7 +833,9 @@ class TestCameraModels:
             atol, rtol = 1.5e-07, 3e-07
         else:  # Fallback
             atol, rtol = 1.65e-04, 1.25
-        assert_close(test_rays[all_valid], ref_rays[all_valid], atol=atol, rtol=rtol)
+        assert_close(
+            test_rays[all_valid], ref_rays[all_valid], atol=atol, rtol=rtol
+        )
 
         # Validity mismatch tolerance by camera type (ordered by decreasing tolerance)
         # Values set ~20% above observed maximums for tight margin
@@ -840,17 +908,25 @@ class TestCameraModelsShutterPose:
         # rays_org: observed atol=3.34e-06, rtol=2.70e-06
         # rays_dir: observed atol=7.75e-07, rtol varies (high due to small components)
         assert_close(
-            test_rays_org[all_valid], ref_rays_org[all_valid], atol=4e-06, rtol=3.5e-06
+            test_rays_org[all_valid],
+            ref_rays_org[all_valid],
+            atol=4e-06,
+            rtol=3.5e-06,
         )
         assert_close(
-            test_rays_dir[all_valid], ref_rays_dir[all_valid], atol=1e-06, rtol=1e-03
+            test_rays_dir[all_valid],
+            ref_rays_dir[all_valid],
+            atol=1e-06,
+            rtol=1e-03,
         )
 
         # Tolerance for validity mismatches in shutter pose calculations
         # Higher for OpenCV models with distortion
         if isinstance(ref_camera, _OpenCVPinholeCameraModel):
             validity_tol = 3e-02  # 3% for OpenCV pinhole models
-        elif isinstance(ref_camera, (_OpenCVFisheyeCameraModel, _FThetaCameraModel)):
+        elif isinstance(
+            ref_camera, (_OpenCVFisheyeCameraModel, _FThetaCameraModel)
+        ):
             validity_tol = 1e-03  # 0.1% for fisheye/ftheta
         else:
             validity_tol = 1e-05  # 0.001% for perfect pinhole
@@ -860,8 +936,10 @@ class TestCameraModelsShutterPose:
         self, world_points, pose_start, pose_end, test_camera, ref_camera
     ):
         """Test world_point_to_image_point_shutter_pose method"""
-        test_img, test_valid = test_camera.world_point_to_image_point_shutter_pose(
-            world_points, pose_start, pose_end, 0
+        test_img, test_valid = (
+            test_camera.world_point_to_image_point_shutter_pose(
+                world_points, pose_start, pose_end, 0
+            )
         )
         ref_img, ref_valid = ref_camera.world_point_to_image_point_shutter_pose(
             world_points, pose_start, pose_end, 0
@@ -874,6 +952,8 @@ class TestCameraModelsShutterPose:
         # These tolerances handle accumulated errors from pose interpolation and projection
         # Values set ~20% above observed maximums for tight margin
         # Observed: atol=3.43e-03, rtol=0.717
-        assert_close(test_img[all_valid], ref_img[all_valid], atol=4.2e-03, rtol=0.87)
+        assert_close(
+            test_img[all_valid], ref_img[all_valid], atol=4.2e-03, rtol=0.87
+        )
 
         assert_mismatch_ratio(test_valid, ref_valid, max=1e-05)

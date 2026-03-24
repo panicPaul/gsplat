@@ -14,19 +14,37 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""gsplat: A library for Gaussian splatting rendering and optimization."""
+
 import warnings
 
 from .color_correct import color_correct_affine, color_correct_quadratic
 from .compression import PngCompression
+from .cuda._lidar import (
+    SpinningDirection,
+)
+from .cuda._lidar import (
+    compute_angles_to_columns_map as compute_lidar_angles_to_columns_map,
+)
+from .cuda._lidar import (
+    compute_tiling as compute_lidar_tiling,
+)
 from .cuda._torch_impl import accumulate
 from .cuda._torch_impl_2dgs import accumulate_2dgs
 from .cuda._wrapper import (
     CameraModel,
     ExternalDistortionModelMeta,
     RollingShutterType,
+    RowOffsetStructuredSpinningLidarModelParameters,
+    RowOffsetStructuredSpinningLidarModelParametersExt,
     fully_fused_projection,
     fully_fused_projection_2dgs,
     fully_fused_projection_with_ut,
+    has_2dgs,
+    has_3dgs,
+    has_3dgut,
+    has_adam,
+    has_reloc,
     isect_offset_encode,
     isect_tiles,
     isect_tiles_lidar,
@@ -39,13 +57,6 @@ from .cuda._wrapper import (
     rasterize_to_pixels_eval3d,
     spherical_harmonics,
     world_to_cam,
-    has_2dgs,
-    has_3dgs,
-    has_3dgut,
-    has_adam,
-    has_reloc,
-    RowOffsetStructuredSpinningLidarModelParameters,
-    RowOffsetStructuredSpinningLidarModelParametersExt,
 )
 from .exporter import export_splats
 from .optimizers import SelectiveAdam
@@ -59,11 +70,6 @@ from .rendering import (
 )
 from .strategy import DefaultStrategy, MCMCStrategy, Strategy
 from .version import __version__
-from .cuda._lidar import (
-    compute_angles_to_columns_map as compute_lidar_angles_to_columns_map,
-    SpinningDirection,
-    compute_tiling as compute_lidar_tiling,
-)
 
 all = [
     "color_correct_affine",

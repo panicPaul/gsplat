@@ -16,9 +16,6 @@
 
 """Tests for mathematical operations in gsplat.cuda._math module."""
 
-import math
-
-import numpy as np
 import pytest
 import torch
 import torch.nn.functional as F
@@ -127,7 +124,11 @@ def test_quat_to_rotmat():
     torch.testing.assert_close(det, torch.ones_like(det))
 
     # Gradient check - concatenate all forward test inputs
-    q_grad = torch.cat([q_identity, q_x180, q_rand], dim=0).double().requires_grad_(True)
+    q_grad = (
+        torch.cat([q_identity, q_x180, q_rand], dim=0)
+        .double()
+        .requires_grad_(True)
+    )
     assert torch.autograd.gradcheck(
         lambda x: _quat_to_rotmat(F.normalize(x, p=2, dim=-1)),
         q_grad,
@@ -137,8 +138,9 @@ def test_quat_to_rotmat():
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="No CUDA device")
 def test_rotmat_to_quat():
     """Test _rotmat_to_quat converts rotation matrices correctly."""
-    from gsplat.cuda._math import _rotmat_to_quat
     import math as m
+
+    from gsplat.cuda._math import _rotmat_to_quat
 
     # Test 1: Identity matrix → identity quaternion (w is largest, trace > 0)
     I = torch.eye(3, device=device).unsqueeze(0)
@@ -148,7 +150,9 @@ def test_rotmat_to_quat():
 
     # Test 2: Known rotation matrix (90° around Z)
     c, s = 0.0, 1.0  # cos(90°), sin(90°)
-    R_z90 = torch.tensor([[[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]]], device=device)
+    R_z90 = torch.tensor(
+        [[[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]]], device=device
+    )
     q = _rotmat_to_quat(R_z90)
     # Expected: (cos(45°), 0, 0, sin(45°)) for 90° around Z
     q_expected = torch.tensor(
@@ -203,9 +207,9 @@ def test_rotmat_to_quat():
 def test_rotmat_to_quat_roundtrip():
     """Test _rotmat_to_quat and _quat_to_rotmat are inverses."""
     from gsplat.cuda._math import (
-        _rotmat_to_quat,
-        _quat_to_rotmat,
         _quat_normalize_rotation,
+        _quat_to_rotmat,
+        _rotmat_to_quat,
     )
 
     # Start with random quaternions
@@ -324,7 +328,11 @@ def test_quat_rotate():
         .double()
         .requires_grad_(True)
     )
-    v_grad = torch.cat([v_rand, v_unit, v_batch], dim=0).double().requires_grad_(True)
+    v_grad = (
+        torch.cat([v_rand, v_unit, v_batch], dim=0)
+        .double()
+        .requires_grad_(True)
+    )
 
     # Test gradients w.r.t. all inputs
     assert torch.autograd.gradcheck(
@@ -336,7 +344,11 @@ def test_quat_rotate():
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="No CUDA device")
 def test_quat_slerp():
     """Test _quat_slerp interpolation."""
-    from gsplat.cuda._math import _quat_slerp, _quat_to_rotmat, _quat_normalize_rotation
+    from gsplat.cuda._math import (
+        _quat_normalize_rotation,
+        _quat_slerp,
+        _quat_to_rotmat,
+    )
 
     # Test 1: Interpolation at t=0 returns q0
     q0_rand = torch.randn(10, 4, device=device)
@@ -362,13 +374,17 @@ def test_quat_slerp():
     import math as m
 
     angle = m.pi / 4  # 45 degrees in radians
-    q_p45 = torch.tensor([[m.cos(angle / 2), 0.0, 0.0, m.sin(angle / 2)]], device=device)
+    q_p45 = torch.tensor(
+        [[m.cos(angle / 2), 0.0, 0.0, m.sin(angle / 2)]], device=device
+    )
     q_m45 = torch.tensor(
         [[m.cos(-angle / 2), 0.0, 0.0, m.sin(-angle / 2)]], device=device
     )
 
     t_half = torch.tensor([0.5], device=device)
-    q_mid = _quat_slerp(q_p45, q_m45, t_half)  # Should produce identity rotation
+    q_mid = _quat_slerp(
+        q_p45, q_m45, t_half
+    )  # Should produce identity rotation
 
     # Check normalization
     lengths = torch.norm(q_mid, dim=-1)
@@ -416,7 +432,9 @@ def test_quat_slerp():
         .requires_grad_(True)
     )
 
-    print(f"q0_grad: {q0_grad.shape}, q1_grad: {q1_grad.shape}, t_grad: {t_grad.shape}")
+    print(
+        f"q0_grad: {q0_grad.shape}, q1_grad: {q1_grad.shape}, t_grad: {t_grad.shape}"
+    )
 
     assert torch.autograd.gradcheck(
         lambda q0, q1, t: _quat_slerp(

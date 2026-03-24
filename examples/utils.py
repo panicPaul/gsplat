@@ -15,13 +15,13 @@
 
 import random
 
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
+import torch.nn.functional as F
+from matplotlib import colormaps
 from sklearn.neighbors import NearestNeighbors
 from torch import Tensor
-import torch.nn.functional as F
-import matplotlib.pyplot as plt
-from matplotlib import colormaps
 
 
 class CameraOptModule(torch.nn.Module):
@@ -32,7 +32,9 @@ class CameraOptModule(torch.nn.Module):
         # Delta positions (3D) + Delta rotations (6D)
         self.embeds = torch.nn.Embedding(n, 9)
         # Identity rotation in 6D representation
-        self.register_buffer("identity", torch.tensor([1.0, 0.0, 0.0, 0.0, 1.0, 0.0]))
+        self.register_buffer(
+            "identity", torch.tensor([1.0, 0.0, 0.0, 0.0, 1.0, 0.0])
+        )
 
     def zero_init(self):
         torch.nn.init.zeros_(self.embeds.weight)
@@ -57,7 +59,9 @@ class CameraOptModule(torch.nn.Module):
         rot = rotation_6d_to_matrix(
             drot + self.identity.expand(*batch_dims, -1)
         )  # (..., 3, 3)
-        transform = torch.eye(4, device=pose_deltas.device).repeat((*batch_dims, 1, 1))
+        transform = torch.eye(4, device=pose_deltas.device).repeat(
+            (*batch_dims, 1, 1)
+        )
         transform[..., :3, :3] = rot
         transform[..., :3, 3] = dx
         return torch.matmul(camtoworlds, transform)
@@ -81,7 +85,9 @@ class AppearanceOptModule(torch.nn.Module):
         self.embeds = torch.nn.Embedding(n, embed_dim)
         layers = []
         layers.append(
-            torch.nn.Linear(embed_dim + feature_dim + (sh_degree + 1) ** 2, mlp_width)
+            torch.nn.Linear(
+                embed_dim + feature_dim + (sh_degree + 1) ** 2, mlp_width
+            )
         )
         layers.append(torch.nn.ReLU(inplace=True))
         for _ in range(mlp_depth - 1):
@@ -118,11 +124,17 @@ class AppearanceOptModule(torch.nn.Module):
         dirs = F.normalize(dirs, dim=-1)  # [C, N, 3]
         num_bases_to_use = (sh_degree + 1) ** 2
         num_bases = (self.sh_degree + 1) ** 2
-        sh_bases = torch.zeros(C, N, num_bases, device=features.device)  # [C, N, K]
-        sh_bases[:, :, :num_bases_to_use] = _eval_sh_bases_fast(num_bases_to_use, dirs)
+        sh_bases = torch.zeros(
+            C, N, num_bases, device=features.device
+        )  # [C, N, K]
+        sh_bases[:, :, :num_bases_to_use] = _eval_sh_bases_fast(
+            num_bases_to_use, dirs
+        )
         # Get colors
         if self.embed_dim > 0:
-            h = torch.cat([embeds, features, sh_bases], dim=-1)  # [C, N, D1 + D2 + K]
+            h = torch.cat(
+                [embeds, features, sh_bases], dim=-1
+            )  # [C, N, D1 + D2 + K]
         else:
             h = torch.cat([features, sh_bases], dim=-1)
         colors = self.color_head(h)
@@ -130,9 +142,9 @@ class AppearanceOptModule(torch.nn.Module):
 
 
 def rotation_6d_to_matrix(d6: Tensor) -> Tensor:
-    """
-    Converts 6D rotation representation by Zhou et al. [1] to rotation matrix
+    """Converts 6D rotation representation by Zhou et al. [1] to rotation matrix
     using Gram--Schmidt orthogonalization per Section B of [1]. Adapted from pytorch3d.
+
     Args:
         d6: 6D rotation representation, of size (*, 6)
 
@@ -144,7 +156,6 @@ def rotation_6d_to_matrix(d6: Tensor) -> Tensor:
     IEEE Conference on Computer Vision and Pattern Recognition, 2019.
     Retrieved from http://arxiv.org/abs/1812.07035
     """
-
     a1, a2 = d6[..., :3], d6[..., 3:]
     b1 = F.normalize(a1, dim=-1)
     b2 = a2 - (b1 * a2).sum(-1, keepdim=True) * b1
@@ -188,7 +199,9 @@ def colormap(img, cmap="jet"):
     return img
 
 
-def apply_float_colormap(img: torch.Tensor, colormap: str = "turbo") -> torch.Tensor:
+def apply_float_colormap(
+    img: torch.Tensor, colormap: str = "turbo"
+) -> torch.Tensor:
     """Convert single channel to a color img.
 
     Args:
@@ -215,8 +228,8 @@ def apply_float_colormap(img: torch.Tensor, colormap: str = "turbo") -> torch.Te
 def apply_depth_colormap(
     depth: torch.Tensor,
     acc: torch.Tensor = None,
-    near_plane: float = None,
-    far_plane: float = None,
+    near_plane: float | None = None,
+    far_plane: float | None = None,
 ) -> torch.Tensor:
     """Converts a depth image to color for easier analysis.
 

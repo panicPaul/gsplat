@@ -12,14 +12,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import math
+import struct
+from dataclasses import dataclass
+
 import torch
 from torch import Tensor
-from dataclasses import dataclass
-import math
-from typing import Tuple
-from ._lidar import relative_sensor_angles, SphericalUnitCoord
+
+from ._lidar import SphericalUnitCoord, relative_sensor_angles
 from ._wrapper import RowOffsetStructuredSpinningLidarModelParametersExt
-import struct
 
 ANGLE_TO_PIXEL_SCALING_FACTOR: int = 1024
 
@@ -70,7 +71,8 @@ def lidar_sample_tileid(
         tile_el = torch.where(
             dense_el >= 1,
             torch.clamp(
-                lidar.tiling.cdf_elevation[torch.clamp(dense_el - 1, min=0)] + 1,
+                lidar.tiling.cdf_elevation[torch.clamp(dense_el - 1, min=0)]
+                + 1,
                 max=lidar.tiling.n_bins_elevation,
             ),
             lidar.tiling.cdf_elevation[dense_el],
@@ -79,7 +81,9 @@ def lidar_sample_tileid(
         tile_el = lidar.tiling.cdf_elevation[dense_el]
 
     idx = SphericalUnitCoord(
-        azimuth=round_fn(norm_az * lidar.tiling.n_bins_azimuth).to(dtype=torch.int32),
+        azimuth=round_fn(norm_az * lidar.tiling.n_bins_azimuth).to(
+            dtype=torch.int32
+        ),
         elevation=tile_el,
     )
 
@@ -95,11 +99,11 @@ def has_any_rays_in_tile(
     end: SphericalUnitCoord,
 ) -> Tensor:
     """Check whether any rays fall within the dense tile range [beg, end).
+
     The full-cover case (beg=0, end=N) forces has_rays=True as a conservative
     optimization implemented in CUDA to avoid I/O.
     We do it here as well for results to match.
     """
-
     raycdf = lidar.tiling.cdf_dense_ray_mask
 
     raycdf_size_az = lidar.tiling.cdf_resolution_azimuth
@@ -117,7 +121,9 @@ def has_any_rays_in_tile(
         + raycdf[beg.azimuth, beg.elevation]
     )
 
-    has_rays = (num_rays > 0) | ((beg.azimuth <= 0) & (end.azimuth >= raycdf_size_az))
+    has_rays = (num_rays > 0) | (
+        (beg.azimuth <= 0) & (end.azimuth >= raycdf_size_az)
+    )
 
     return has_rays
 
@@ -130,13 +136,12 @@ def _isect_tiles_lidar(
     depths: Tensor,  # [..., N]
     *,
     sort: bool = True,
-) -> Tuple[Tensor, Tensor, Tensor]:
+) -> tuple[Tensor, Tensor, Tensor]:
     """Pytorch implementation of `gsplat.cuda._wrapper.isect_tiles_lidar()`.
 
     This function expects `means2d` and `radii` to be in angular pixel space
     (angle * ANGLE_TO_PIXEL_SCALING_FACTOR).
     """
-
     image_dims = means2d.shape[:-2]
     N = means2d.shape[-2]  # Total number of gaussians
     assert means2d.shape == (*image_dims, N, 2), means2d.shape
@@ -185,7 +190,9 @@ def _isect_tiles_lidar(
     full_cover = (beg_pix.azimuth <= 0) & (end_pix.azimuth >= fov_span_pix_az)
 
     # Don't let gaussian size to be more than 2*pi
-    end_pix.azimuth = torch.minimum(end_pix.azimuth, beg_pix.azimuth + full_circle_pix)
+    end_pix.azimuth = torch.minimum(
+        end_pix.azimuth, beg_pix.azimuth + full_circle_pix
+    )
 
     overflows = end_pix.azimuth > full_circle_pix
     underflows = beg_pix.azimuth < 0
@@ -244,7 +251,8 @@ def _isect_tiles_lidar(
             & (s.idxdense.azimuth <= lidar.tiling.cdf_resolution_azimuth)
         )
         assert torch.all(
-            (0 <= s.idx.azimuth) & (s.idx.azimuth <= lidar.tiling.n_bins_azimuth)
+            (0 <= s.idx.azimuth)
+            & (s.idx.azimuth <= lidar.tiling.n_bins_azimuth)
         )
 
     # Elevation ranges of Regions A and B must be the same.
@@ -353,7 +361,9 @@ def _isect_tiles_lidar(
         depth_id = struct.unpack("i", struct.pack("f", depth_f32))[0]
         depth_id = int(depth_id) & 0xFFFFFFFF
 
-        for el in range(int(tile_range_el[0][index]), int(tile_range_el[1][index])):
+        for el in range(
+            int(tile_range_el[0][index]), int(tile_range_el[1][index])
+        ):
             for az_s, az_e in tile_ranges_az:
                 for az in range(int(az_s[index]), int(az_e[index])):
                     actual_az = az % n_bins_az if periodic_az else az

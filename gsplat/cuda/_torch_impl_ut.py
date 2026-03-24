@@ -32,34 +32,32 @@ References:
 """
 
 import math
-from typing import Optional, Tuple
 
 import torch
 from torch import Tensor
 
 from gsplat._helper import assert_shape
 
-from ._wrapper import (
-    CameraModel,
-    RollingShutterType,
-    UnscentedTransformParameters,
-    FThetaCameraDistortionParameters,
+from ._lidar import (
+    RowOffsetStructuredSpinningLidarModelParametersExt,
 )
 from ._math import (
     _quat_to_rotmat,
     _safe_normalize,
 )
 from ._torch_cameras import (
-    _viewmat_to_pose,
     _BaseCameraModel,
     _interpolate_shutter_pose,
+    _viewmat_to_pose,
 )
-
 from ._torch_lidars import (
     _RowOffsetStructuredSpinningLidarModel,
 )
-from ._lidar import (
-    RowOffsetStructuredSpinningLidarModelParametersExt,
+from ._wrapper import (
+    CameraModel,
+    FThetaCameraDistortionParameters,
+    RollingShutterType,
+    UnscentedTransformParameters,
 )
 
 
@@ -67,7 +65,7 @@ def _compute_ut_weights(
     ut_params: UnscentedTransformParameters,
     device: torch.device,
     dtype: torch.dtype,
-) -> Tuple[Tensor, Tensor]:
+) -> tuple[Tensor, Tensor]:
     """Compute Unscented Transform weights for sigma points.
 
     For a 3D Gaussian, we generate 2*D+1 = 7 sigma points.
@@ -175,9 +173,11 @@ def _world_gaussian_to_image_gaussian_unscented_transform_shutter_pose(
     pose_start: Tensor,  # [B, C, 7]
     pose_end: Tensor,  # [B, C, 7]
     ut_params: UnscentedTransformParameters,
-) -> Tuple[Tensor, Tensor]:
-    """Project a 3D Gaussian to 2D using the Unscented Transform to handle non-linear
-    camera models (distortion, fisheye, rolling shutter)."""
+) -> tuple[Tensor, Tensor]:
+    """Project a 3D Gaussian to 2D using the Unscented Transform.
+
+    Handles non-linear camera models (distortion, fisheye, rolling shutter).
+    """
     B = means.shape[:-2]
     N = means.shape[-2]
     C = pose_start.shape[-2]
@@ -191,7 +191,9 @@ def _world_gaussian_to_image_gaussian_unscented_transform_shutter_pose(
     device = means.device
 
     # Generate sigma points for the Gaussian
-    sigma_points_world = _world_gaussian_sigma_points(means, quats, scales, ut_params)
+    sigma_points_world = _world_gaussian_sigma_points(
+        means, quats, scales, ut_params
+    )
 
     # Compute UT weights (shared for all Gaussians)
     weights_mean, weights_cov = _compute_ut_weights(ut_params, device, dtype)
@@ -199,7 +201,9 @@ def _world_gaussian_to_image_gaussian_unscented_transform_shutter_pose(
     # Project sigma points using camera model
 
     # Expand sigma points for each camera: [..., N, 7, 3] -> [..., C, N, 7, 3]
-    sigma_points_world_exp = sigma_points_world.unsqueeze(-4).expand(B + (C, N, 7, 3))
+    sigma_points_world_exp = sigma_points_world.unsqueeze(-4).expand(
+        B + (C, N, 7, 3)
+    )
 
     # Flatten only N and sigma points, keep C separate: [B, C, N, 7, 3] -> [B, C, N*7, 3]
     # Camera model is batched over C, so each camera processes its own N*7 points
@@ -223,9 +227,9 @@ def _world_gaussian_to_image_gaussian_unscented_transform_shutter_pose(
         # CUDA early-exits on first invalid point, using partial sum
         # Simulate this with cumulative validity mask
         # cumulative_valid[..., i] = True if points 0..i are ALL valid
-        cumulative_valid = torch.cumprod(valid_points.to(torch.float32), dim=-1).to(
-            torch.bool
-        )
+        cumulative_valid = torch.cumprod(
+            valid_points.to(torch.float32), dim=-1
+        ).to(torch.bool)
 
         # All sigma points must be valid for Gaussian to be valid
         assert_shape("cumulative_valid", cumulative_valid, B + (C, N, 7))
@@ -240,7 +244,9 @@ def _world_gaussian_to_image_gaussian_unscented_transform_shutter_pose(
         weights_mean_expanded = weights_mean.view(
             [1] * len(B) + [1, 1, 7]
         )  # [B, 1, 1, 7]
-        weights_mean_eff = weights_mean_expanded * effective_mask  # [B, C, N, 7]
+        weights_mean_eff = (
+            weights_mean_expanded * effective_mask
+        )  # [B, C, N, 7]
 
         weights_cov_expanded = weights_cov.view([1] * len(B) + [1, 1, 7])
         weights_cov_eff = weights_cov_expanded * effective_mask  # [B, C, N, 7]
@@ -288,9 +294,13 @@ def _add_blur(
     """Add eps2d to the covariance matrix for numerical stability."""
     det_orig = torch.linalg.det(cov_2d)  # [B, C, N]
 
-    cov_2d = cov_2d + eps2d * torch.eye(2, dtype=cov_2d.dtype, device=cov_2d.device)
+    cov_2d = cov_2d + eps2d * torch.eye(
+        2, dtype=cov_2d.dtype, device=cov_2d.device
+    )
     det_blur = torch.linalg.det(cov_2d)
-    compensation = torch.sqrt(torch.clamp(det_orig / det_blur, min=0.0))  # [B, C, N]
+    compensation = torch.sqrt(
+        torch.clamp(det_orig / det_blur, min=0.0)
+    )  # [B, C, N]
 
     assert_shape("det_blur", det_blur, B + (C, N))
     assert_shape("cov_2d", cov_2d, B + (C, N, 2, 2))
@@ -302,7 +312,7 @@ def _fully_fused_projection_with_ut(
     means: Tensor,  # [..., N, 3]
     quats: Tensor,  # [..., N, 4]
     scales: Tensor,  # [..., N, 3]
-    opacities: Optional[Tensor],  # [..., N]
+    opacities: Tensor | None,  # [..., N]
     viewmats: Tensor,  # [..., C, 4, 4]
     Ks: Tensor,  # [..., C, 3, 3]
     width: int,
@@ -313,16 +323,17 @@ def _fully_fused_projection_with_ut(
     radius_clip: float = 0.0,
     calc_compensations: bool = False,
     camera_model: CameraModel = "pinhole",
-    ut_params: Optional[UnscentedTransformParameters] = None,
-    radial_coeffs: Optional[Tensor] = None,
-    tangential_coeffs: Optional[Tensor] = None,
-    thin_prism_coeffs: Optional[Tensor] = None,
-    ftheta_coeffs: Optional[FThetaCameraDistortionParameters] = None,
-    lidar_coeffs: Optional[RowOffsetStructuredSpinningLidarModelParametersExt] = None,
+    ut_params: UnscentedTransformParameters | None = None,
+    radial_coeffs: Tensor | None = None,
+    tangential_coeffs: Tensor | None = None,
+    thin_prism_coeffs: Tensor | None = None,
+    ftheta_coeffs: FThetaCameraDistortionParameters | None = None,
+    lidar_coeffs: RowOffsetStructuredSpinningLidarModelParametersExt
+    | None = None,
     rolling_shutter: RollingShutterType = RollingShutterType.GLOBAL,
-    viewmats_rs: Optional[Tensor] = None,  # [..., C, 4, 4]
+    viewmats_rs: Tensor | None = None,  # [..., C, 4, 4]
     global_z_order: bool = True,
-) -> Tuple[Tensor, Tensor, Tensor, Tensor, Optional[Tensor]]:
+) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor | None]:
     """PyTorch reference implementation of fully_fused_projection_with_ut().
 
     Projects 3D Gaussians to 2D using the Unscented Transform to handle non-linear
@@ -358,8 +369,10 @@ def _fully_fused_projection_with_ut(
         tangential_coeffs: [..., C, 2] tangential distortion coefficients (pinhole only)
         thin_prism_coeffs: [..., C, 4] thin prism distortion coefficients (pinhole only)
         ftheta_coeffs: F-theta camera parameters
+        lidar_coeffs: Lidar camera parameters
         rolling_shutter: Rolling shutter type
         viewmats_rs: End camera view matrices for rolling shutter [..., C, 4, 4]
+        global_z_order: If True, use global z-ordering across cameras
 
     Returns:
         radii: Projected radii [..., C, N, 2] (radius_x, radius_y)
@@ -443,7 +456,9 @@ def _fully_fused_projection_with_ut(
     else:
         # Interpolate at t=0.5 for Gaussian center
         relative_time = torch.full(B + (C,), 0.5, device=device, dtype=dtype)
-        pose_interp = _interpolate_shutter_pose(pose_start, pose_end, relative_time)
+        pose_interp = _interpolate_shutter_pose(
+            pose_start, pose_end, relative_time
+        )
 
         # Extract world-to-camera transform from interpolated pose
         R_cam = _quat_to_rotmat(pose_interp[..., 3:])  # [B, C, 3, 3]
@@ -454,7 +469,9 @@ def _fully_fused_projection_with_ut(
 
     # means: [B, N, 3], R_cam: [B, C, 3, 3], t_cam: [B, C, 3]
     means_cam = (
-        torch.einsum("...cij,...nj->...cni", R_cam, means)  # [B, C, 3, 3]  # [B, N, 3]
+        torch.einsum(
+            "...cij,...nj->...cni", R_cam, means
+        )  # [B, C, 3, 3]  # [B, N, 3]
         + t_cam[..., None, :]
     )  # [B, C, N, 3]
 
@@ -496,7 +513,7 @@ def _fully_fused_projection_with_ut(
 
     # Apply opacity-based culling
     # Reference: https://arxiv.org/pdf/2402.00525 Section B.2
-    ALPHA_THRESHOLD: float = float(1.0) / float(255.0)  # Minimum visible opacity
+    ALPHA_THRESHOLD: float = 1.0 / 255.0  # Minimum visible opacity
 
     # Default extend
     extend = torch.full(B + (C, N), 3.33, dtype=dtype, device=device)
@@ -514,7 +531,9 @@ def _fully_fused_projection_with_ut(
             extend,
             # Clamp to avoid sqrt(negative).
             # Opacities < ALPHA_THRESHOLD are discarded already, no harm done.
-            torch.sqrt(2.0 * torch.log(torch.clamp(opacity / ALPHA_THRESHOLD, min=1.0))),
+            torch.sqrt(
+                2.0 * torch.log(torch.clamp(opacity / ALPHA_THRESHOLD, min=1.0))
+            ),
         )  # [B, C, N]
 
     # Compute radii with eigenvalue-based tight bounding box
@@ -537,7 +556,9 @@ def _fully_fused_projection_with_ut(
 
     # Radius clipping: cull sub-pixel Gaussians
     # If both x and y radii <= radius_clip, the Gaussian is culled
-    valid_gaussian = valid_gaussian & (torch.max(radius, dim=-1)[0] > radius_clip)
+    valid_gaussian = valid_gaussian & (
+        torch.max(radius, dim=-1)[0] > radius_clip
+    )
 
     # Image bounds culling: cull Gaussians outside image
     if camera_model == "lidar":
@@ -557,10 +578,14 @@ def _fully_fused_projection_with_ut(
     # For invalid Gaussians, radii should be 0 (default)
     radii_computed = radius.to(torch.int32)  # [B, C, N, 2]
     radii = torch.where(
-        valid_gaussian[..., None], radii_computed, torch.zeros_like(radii_computed)
+        valid_gaussian[..., None],
+        radii_computed,
+        torch.zeros_like(radii_computed),
     )
 
-    means2d = torch.where(valid_gaussian[..., None], mean_2d, torch.zeros_like(mean_2d))
+    means2d = torch.where(
+        valid_gaussian[..., None], mean_2d, torch.zeros_like(mean_2d)
+    )
 
     if global_z_order:
         depth = center_z
@@ -579,7 +604,9 @@ def _fully_fused_projection_with_ut(
         dim=-1,
     )  # [B, C, N, 3]
     conics = torch.where(
-        valid_gaussian[..., None], conics_computed, torch.zeros_like(conics_computed)
+        valid_gaussian[..., None],
+        conics_computed,
+        torch.zeros_like(conics_computed),
     )
 
     # Mask compensation output if requested, otherwise return zeros

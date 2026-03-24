@@ -13,8 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Distributed training utilities for multi-GPU Gaussian splatting."""
+
 import os
-from typing import Any, Callable, List, Optional, Union
+from collections.abc import Callable
+from typing import Any
 
 import torch
 import torch.distributed as dist
@@ -23,8 +26,8 @@ from torch import Tensor
 
 
 def all_gather_int32(
-    world_size: int, value: Union[int, Tensor], device: Optional[torch.device] = None
-) -> List[int]:
+    world_size: int, value: int | Tensor, device: torch.device | None = None
+) -> list[int]:
     """Gather an 32-bit integer from all ranks.
 
     .. note::
@@ -62,16 +65,15 @@ def all_gather_int32(
     if isinstance(value, int):
         # return as list of integers on CPU
         return collected.tolist()
-    else:
-        # return as list of single-element tensors
-        return collected.unbind()
+    # return as list of single-element tensors
+    return collected.unbind()
 
 
 def all_to_all_int32(
     world_size: int,
-    values: List[Union[int, Tensor]],
-    device: Optional[torch.device] = None,
-) -> List[int]:
+    values: list[int | Tensor],
+    device: torch.device | None = None,
+) -> list[int]:
     """Exchange 32-bit integers between all ranks in a many-to-many fashion.
 
     .. note::
@@ -99,7 +101,11 @@ def all_to_all_int32(
 
     # move to CUDA
     values_tensor = [
-        (torch.tensor(v, dtype=torch.int, device=device) if isinstance(v, int) else v)
+        (
+            torch.tensor(v, dtype=torch.int, device=device)
+            if isinstance(v, int)
+            else v
+        )
         for v in values
     ]
 
@@ -114,7 +120,9 @@ def all_to_all_int32(
     ]
 
 
-def all_gather_tensor_list(world_size: int, tensor_list: List[Tensor]) -> List[Tensor]:
+def all_gather_tensor_list(
+    world_size: int, tensor_list: list[Tensor]
+) -> list[Tensor]:
     """Gather a list of tensors from all ranks.
 
     .. note::
@@ -158,7 +166,9 @@ def all_gather_tensor_list(world_size: int, tensor_list: List[Tensor]) -> List[T
 
     N = len(tensor_list[0])
     for tensor in tensor_list:
-        assert len(tensor) == N, "All tensors should have the same first dimension size"
+        assert len(tensor) == N, (
+            "All tensors should have the same first dimension size"
+        )
 
     # concatenate tensors and record their sizes
     data = torch.cat([t.reshape(N, -1) for t in tensor_list], dim=-1)
@@ -177,17 +187,19 @@ def all_gather_tensor_list(world_size: int, tensor_list: List[Tensor]) -> List[T
     out_tensor_tuple = torch.split(collected, sizes, dim=-1)
     out_tensor_list = []
     for out_tensor, tensor in zip(out_tensor_tuple, tensor_list):
-        out_tensor = out_tensor.view(-1, *tensor.shape[1:])  # [N * world_size, *]
+        out_tensor = out_tensor.view(
+            -1, *tensor.shape[1:]
+        )  # [N * world_size, *]
         out_tensor_list.append(out_tensor)
     return out_tensor_list
 
 
 def all_to_all_tensor_list(
     world_size: int,
-    tensor_list: List[Tensor],
-    splits: List[Union[int, Tensor]],
-    output_splits: Optional[List[Union[int, Tensor]]] = None,
-) -> List[Tensor]:
+    tensor_list: list[Tensor],
+    splits: list[int | Tensor],
+    output_splits: list[int | Tensor] | None = None,
+) -> list[Tensor]:
     """Split and exchange tensors between all ranks in a many-to-many fashion.
 
     Args:
@@ -234,7 +246,9 @@ def all_to_all_tensor_list(
 
     N = len(tensor_list[0])
     for tensor in tensor_list:
-        assert len(tensor) == N, "All tensors should have the same first dimension size"
+        assert len(tensor) == N, (
+            "All tensors should have the same first dimension size"
+        )
 
     assert len(splits) == world_size, (
         "The length of splits should be equal to world_size"
@@ -248,7 +262,9 @@ def all_to_all_tensor_list(
     if output_splits is not None:
         collected_splits = output_splits
     else:
-        collected_splits = all_to_all_int32(world_size, splits, device=data.device)
+        collected_splits = all_to_all_int32(
+            world_size, splits, device=data.device
+        )
     collected = [
         torch.empty((l, *data.shape[1:]), dtype=data.dtype, device=data.device)
         for l in collected_splits
@@ -289,7 +305,7 @@ def _distributed_worker(
     world_size: int,
     fn: Callable,
     args: Any,
-    local_rank: Optional[int] = None,
+    local_rank: int | None = None,
     verbose: bool = False,
 ) -> bool:
     if local_rank is None:  # single Node
@@ -337,9 +353,13 @@ def cli(fn: Callable, args: Any, verbose: bool = False) -> bool:
     assert torch.cuda.is_available(), "CUDA device is required!"
     if "OMPI_COMM_WORLD_SIZE" in os.environ:  # multi-node
         local_rank = int(os.environ["OMPI_COMM_WORLD_LOCAL_RANK"])
-        world_size = int(os.environ["OMPI_COMM_WORLD_SIZE"])  # dist.get_world_size()
+        world_size = int(
+            os.environ["OMPI_COMM_WORLD_SIZE"]
+        )  # dist.get_world_size()
         world_rank = int(os.environ["OMPI_COMM_WORLD_RANK"])  # dist.get_rank()
-        return _distributed_worker(world_rank, world_size, fn, args, local_rank, verbose)
+        return _distributed_worker(
+            world_rank, world_size, fn, args, local_rank, verbose
+        )
 
     world_size = torch.cuda.device_count()
     distributed = world_size > 1
@@ -369,5 +389,4 @@ def cli(fn: Callable, args: Any, verbose: bool = False) -> bool:
                 if verbose:
                     print("process " + str(i) + " finished")
         return True
-    else:
-        return _distributed_worker(0, 1, fn=fn, args=args)
+    return _distributed_worker(0, 1, fn=fn, args=args)

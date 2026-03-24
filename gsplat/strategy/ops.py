@@ -13,9 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import numpy as np
-from typing import Callable, Dict, List, Union
+"""Operations for densification and pruning of Gaussian splats."""
 
+from collections.abc import Callable
+
+import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import Tensor
@@ -26,7 +28,9 @@ from gsplat.utils import normalized_quat_to_rotmat
 
 
 @torch.no_grad()
-def _multinomial_sample(weights: Tensor, n: int, replacement: bool = True) -> Tensor:
+def _multinomial_sample(
+    weights: Tensor, n: int, replacement: bool = True
+) -> Tensor:
     """Sample from a distribution using torch.multinomial or numpy.random.choice.
 
     This function adaptively chooses between `torch.multinomial` and `numpy.random.choice`
@@ -46,26 +50,25 @@ def _multinomial_sample(weights: Tensor, n: int, replacement: bool = True) -> Te
     if num_elements <= 2**24:
         # Use torch.multinomial for elements within the limit
         return torch.multinomial(weights, n, replacement=replacement)
-    else:
-        # Fallback to numpy.random.choice for larger element spaces
-        weights = weights / weights.sum()
-        weights_np = weights.detach().cpu().numpy()
-        sampled_idxs_np = np.random.choice(
-            num_elements, size=n, p=weights_np, replace=replacement
-        )
-        sampled_idxs = torch.from_numpy(sampled_idxs_np)
+    # Fallback to numpy.random.choice for larger element spaces
+    weights = weights / weights.sum()
+    weights_np = weights.detach().cpu().numpy()
+    sampled_idxs_np = np.random.choice(
+        num_elements, size=n, p=weights_np, replace=replacement
+    )
+    sampled_idxs = torch.from_numpy(sampled_idxs_np)
 
-        # Return the sampled indices on the original device
-        return sampled_idxs.to(weights.device)
+    # Return the sampled indices on the original device
+    return sampled_idxs.to(weights.device)
 
 
 @torch.no_grad()
 def _update_param_with_optimizer(
     param_fn: Callable[[str, Tensor], Tensor],
     optimizer_fn: Callable[[str, Tensor], Tensor],
-    params: Union[Dict[str, torch.nn.Parameter], torch.nn.ParameterDict],
-    optimizers: Dict[str, torch.optim.Optimizer],
-    names: Union[List[str], None] = None,
+    params: dict[str, torch.nn.Parameter] | torch.nn.ParameterDict,
+    optimizers: dict[str, torch.optim.Optimizer],
+    names: list[str] | None = None,
 ):
     """Update the parameters and the state in the optimizers with defined functions.
 
@@ -96,7 +99,7 @@ def _update_param_with_optimizer(
         for i in range(len(optimizer.param_groups)):
             param_state = optimizer.state[param]
             del optimizer.state[param]
-            for key in param_state.keys():
+            for key in param_state:
                 if key != "step":
                     v = param_state[key]
                     param_state[key] = optimizer_fn(key, v)
@@ -106,9 +109,9 @@ def _update_param_with_optimizer(
 
 @torch.no_grad()
 def duplicate(
-    params: Union[Dict[str, torch.nn.Parameter], torch.nn.ParameterDict],
-    optimizers: Dict[str, torch.optim.Optimizer],
-    state: Dict[str, Tensor],
+    params: dict[str, torch.nn.Parameter] | torch.nn.ParameterDict,
+    optimizers: dict[str, torch.optim.Optimizer],
+    state: dict[str, Tensor],
     mask: Tensor,
 ):
     """Inplace duplicate the Gaussian with the given mask.
@@ -116,16 +119,21 @@ def duplicate(
     Args:
         params: A dictionary of parameters.
         optimizers: A dictionary of optimizers, each corresponding to a parameter.
+        state: A dictionary of extra running state to be updated.
         mask: A boolean mask to duplicate the Gaussians.
     """
     device = mask.device
     sel = torch.where(mask)[0]
 
     def param_fn(name: str, p: Tensor) -> Tensor:
-        return torch.nn.Parameter(torch.cat([p, p[sel]]), requires_grad=p.requires_grad)
+        return torch.nn.Parameter(
+            torch.cat([p, p[sel]]), requires_grad=p.requires_grad
+        )
 
     def optimizer_fn(key: str, v: Tensor) -> Tensor:
-        return torch.cat([v, torch.zeros((len(sel), *v.shape[1:]), device=device)])
+        return torch.cat(
+            [v, torch.zeros((len(sel), *v.shape[1:]), device=device)]
+        )
 
     # update the parameters and the state in the optimizers
     _update_param_with_optimizer(param_fn, optimizer_fn, params, optimizers)
@@ -137,9 +145,9 @@ def duplicate(
 
 @torch.no_grad()
 def split(
-    params: Union[Dict[str, torch.nn.Parameter], torch.nn.ParameterDict],
-    optimizers: Dict[str, torch.optim.Optimizer],
-    state: Dict[str, Tensor],
+    params: dict[str, torch.nn.Parameter] | torch.nn.ParameterDict,
+    optimizers: dict[str, torch.optim.Optimizer],
+    state: dict[str, Tensor],
     mask: Tensor,
     revised_opacity: bool = False,
 ):
@@ -148,6 +156,7 @@ def split(
     Args:
         params: A dictionary of parameters.
         optimizers: A dictionary of optimizers, each corresponding to a parameter.
+        state: A dictionary of extra running state to be updated.
         mask: A boolean mask to split the Gaussians.
         revised_opacity: Whether to use revised opacity formulation
           from arXiv:2404.06109. Default: False.
@@ -197,9 +206,9 @@ def split(
 
 @torch.no_grad()
 def remove(
-    params: Union[Dict[str, torch.nn.Parameter], torch.nn.ParameterDict],
-    optimizers: Dict[str, torch.optim.Optimizer],
-    state: Dict[str, Tensor],
+    params: dict[str, torch.nn.Parameter] | torch.nn.ParameterDict,
+    optimizers: dict[str, torch.optim.Optimizer],
+    state: dict[str, Tensor],
     mask: Tensor,
 ):
     """Inplace remove the Gaussian with the given mask.
@@ -207,6 +216,7 @@ def remove(
     Args:
         params: A dictionary of parameters.
         optimizers: A dictionary of optimizers, each corresponding to a parameter.
+        state: A dictionary of extra running state to be updated.
         mask: A boolean mask to remove the Gaussians.
     """
     sel = torch.where(~mask)[0]
@@ -227,9 +237,9 @@ def remove(
 
 @torch.no_grad()
 def reset_opa(
-    params: Union[Dict[str, torch.nn.Parameter], torch.nn.ParameterDict],
-    optimizers: Dict[str, torch.optim.Optimizer],
-    state: Dict[str, Tensor],
+    params: dict[str, torch.nn.Parameter] | torch.nn.ParameterDict,
+    optimizers: dict[str, torch.optim.Optimizer],
+    state: dict[str, Tensor],
     value: float,
 ):
     """Inplace reset the opacities to the given post-sigmoid value.
@@ -237,15 +247,17 @@ def reset_opa(
     Args:
         params: A dictionary of parameters.
         optimizers: A dictionary of optimizers, each corresponding to a parameter.
+        state: A dictionary of extra running state (unused here).
         value: The value to reset the opacities
     """
 
     def param_fn(name: str, p: Tensor) -> Tensor:
         if name == "opacities":
-            opacities = torch.clamp(p, max=torch.logit(torch.tensor(value)).item())
+            opacities = torch.clamp(
+                p, max=torch.logit(torch.tensor(value)).item()
+            )
             return torch.nn.Parameter(opacities, requires_grad=p.requires_grad)
-        else:
-            raise ValueError(f"Unexpected parameter name: {name}")
+        raise ValueError(f"Unexpected parameter name: {name}")
 
     def optimizer_fn(key: str, v: Tensor) -> Tensor:
         return torch.zeros_like(v)
@@ -258,9 +270,9 @@ def reset_opa(
 
 @torch.no_grad()
 def relocate(
-    params: Union[Dict[str, torch.nn.Parameter], torch.nn.ParameterDict],
-    optimizers: Dict[str, torch.optim.Optimizer],
-    state: Dict[str, Tensor],
+    params: dict[str, torch.nn.Parameter] | torch.nn.ParameterDict,
+    optimizers: dict[str, torch.optim.Optimizer],
+    state: dict[str, Tensor],
     mask: Tensor,
     binoms: Tensor,
     min_opacity: float = 0.005,
@@ -270,7 +282,10 @@ def relocate(
     Args:
         params: A dictionary of parameters.
         optimizers: A dictionary of optimizers, each corresponding to a parameter.
+        state: A dictionary of extra running state to be updated.
         mask: A boolean mask to indicates which Gaussians are dead.
+        binoms: Binomial coefficients for relocation probability computation.
+        min_opacity: Minimum opacity for relocated Gaussians. Default: 0.005.
     """
     # support "opacities" with shape [N,] or [N, 1]
     opacities = torch.sigmoid(params["opacities"])
@@ -307,20 +322,21 @@ def relocate(
     # update the parameters and the state in the optimizers
     _update_param_with_optimizer(param_fn, optimizer_fn, params, optimizers)
     # update the extra running state
-    for k, v in state.items():
+    for v in state.values():
         if isinstance(v, torch.Tensor):
             v[sampled_idxs] = 0
 
 
 @torch.no_grad()
 def sample_add(
-    params: Union[Dict[str, torch.nn.Parameter], torch.nn.ParameterDict],
-    optimizers: Dict[str, torch.optim.Optimizer],
-    state: Dict[str, Tensor],
+    params: dict[str, torch.nn.Parameter] | torch.nn.ParameterDict,
+    optimizers: dict[str, torch.optim.Optimizer],
+    state: dict[str, Tensor],
     n: int,
     binoms: Tensor,
     min_opacity: float = 0.005,
 ):
+    """Sample n new Gaussians proportional to opacity and add them to the scene."""
     opacities = torch.sigmoid(params["opacities"])
 
     eps = torch.finfo(torch.float32).eps
@@ -357,11 +373,12 @@ def sample_add(
 
 @torch.no_grad()
 def inject_noise_to_position(
-    params: Union[Dict[str, torch.nn.Parameter], torch.nn.ParameterDict],
-    optimizers: Dict[str, torch.optim.Optimizer],
-    state: Dict[str, Tensor],
+    params: dict[str, torch.nn.Parameter] | torch.nn.ParameterDict,
+    optimizers: dict[str, torch.optim.Optimizer],
+    state: dict[str, Tensor],
     scaler: float,
 ):
+    """Inject noise scaled by opacity and covariance to Gaussian positions."""
     opacities = torch.sigmoid(params["opacities"].flatten())
     scales = torch.exp(params["scales"])
     covars, _ = quat_scale_to_covar_preci(

@@ -13,6 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Densification and pruning strategies for Gaussian splats."""
+
 from .base import Strategy
 from .default import DefaultStrategy
 from .mcmc import MCMCStrategy
+
+__all__ = ["DefaultStrategy", "MCMCStrategy", "Strategy"]

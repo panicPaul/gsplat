@@ -19,36 +19,40 @@ import math
 import os
 import time
 from dataclasses import dataclass, field
-from typing import Dict, List, Literal, Optional, Tuple
 from pathlib import Path
+from typing import Literal
 
 import imageio
-import nerfview
 import numpy as np
 import torch
 import torch.nn.functional as F
 import tqdm
 import tyro
 import viser
-from datasets.colmap import Dataset, Parser
-from datasets.traj import generate_interpolated_path
+from gsplat.rendering import (
+    rasterization_2dgs,
+    rasterization_2dgs_inria_wrapper,
+)
+from gsplat.strategy import DefaultStrategy
+from nerfview import CameraState, RenderTabState, apply_float_colormap
 from torch import Tensor
 from torch.utils.tensorboard import SummaryWriter
-from torchmetrics.image import PeakSignalNoiseRatio, StructuralSimilarityIndexMeasure
+from torchmetrics.image import (
+    PeakSignalNoiseRatio,
+    StructuralSimilarityIndexMeasure,
+)
 from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
+
+from datasets.colmap import Dataset, Parser
+from datasets.traj import generate_interpolated_path
+from gsplat_viewer_2dgs import GsplatRenderTabState, GsplatViewer
 from utils import (
     AppearanceOptModule,
     CameraOptModule,
-    apply_depth_colormap,
-    colormap,
     knn,
     rgb_to_sh,
     set_random_seed,
 )
-from gsplat_viewer_2dgs import GsplatViewer, GsplatRenderTabState
-from gsplat.rendering import rasterization_2dgs, rasterization_2dgs_inria_wrapper
-from gsplat.strategy import DefaultStrategy
-from nerfview import CameraState, RenderTabState, apply_float_colormap
 
 
 @dataclass
@@ -56,7 +60,7 @@ class Config:
     # Disable viewer
     disable_viewer: bool = False
     # Path to the .pt file. If provide, it will skip training and render a video
-    ckpt: Optional[str] = None
+    ckpt: str | None = None
 
     # Path to the Mip-NeRF 360 dataset
     data_dir: str = "data/360_v2/garden"
@@ -67,7 +71,7 @@ class Config:
     # Every N images there is a test image
     test_every: int = 8
     # Random crop size for training  (experimental)
-    patch_size: Optional[int] = None
+    patch_size: int | None = None
     # A global scaler that applies to the scene size related parameters
     global_scale: float = 1.0
     # Normalize the world space
@@ -84,9 +88,9 @@ class Config:
     # Number of training steps
     max_steps: int = 30_000
     # Steps to evaluate the model
-    eval_steps: List[int] = field(default_factory=lambda: [7_000, 30_000])
+    eval_steps: list[int] = field(default_factory=lambda: [7_000, 30_000])
     # Steps to save the model
-    save_steps: List[int] = field(default_factory=lambda: [7_000, 30_000])
+    save_steps: list[int] = field(default_factory=lambda: [7_000, 30_000])
 
     # Initialization strategy
     init_type: str = "sfm"
@@ -209,14 +213,16 @@ def create_splats_with_optimizers(
     sh_degree: int = 3,
     sparse_grad: bool = False,
     batch_size: int = 1,
-    feature_dim: Optional[int] = None,
+    feature_dim: int | None = None,
     device: str = "cuda",
-) -> Tuple[torch.nn.ParameterDict, Dict[str, torch.optim.Optimizer]]:
+) -> tuple[torch.nn.ParameterDict, dict[str, torch.optim.Optimizer]]:
     if init_type == "sfm":
         points = torch.from_numpy(parser.points).float()
         rgbs = torch.from_numpy(parser.points_rgb / 255.0).float()
     elif init_type == "random":
-        points = init_extent * scene_scale * (torch.rand((init_num_pts, 3)) * 2 - 1)
+        points = (
+            init_extent * scene_scale * (torch.rand((init_num_pts, 3)) * 2 - 1)
+        )
         rgbs = torch.rand((init_num_pts, 3))
     else:
         raise ValueError("Please specify a correct init_type: sfm or random")
@@ -225,7 +231,9 @@ def create_splats_with_optimizers(
     # Initialize the GS size to be the average dist of the 3 nearest neighbors
     dist2_avg = (knn(points, 4)[:, 1:] ** 2).mean(dim=-1)  # [N,]
     dist_avg = torch.sqrt(dist2_avg)
-    scales = torch.log(dist_avg * init_scale).unsqueeze(-1).repeat(1, 3)  # [N, 3]
+    scales = (
+        torch.log(dist_avg * init_scale).unsqueeze(-1).repeat(1, 3)
+    )  # [N, 3]
     quats = torch.rand((N, 4))  # [N, 4]
     opacities = torch.logit(torch.full((N,), init_opacity))  # [N,]
 
@@ -242,7 +250,9 @@ def create_splats_with_optimizers(
         colors = torch.zeros((N, (sh_degree + 1) ** 2, 3))  # [N, K, 3]
         colors[:, 0, :] = rgb_to_sh(rgbs)
         params.append(("sh0", torch.nn.Parameter(colors[:, :1, :]), 2.5e-3))
-        params.append(("shN", torch.nn.Parameter(colors[:, 1:, :]), 2.5e-3 / 20))
+        params.append(
+            ("shN", torch.nn.Parameter(colors[:, 1:, :]), 2.5e-3 / 20)
+        )
     else:
         # features will be used for appearance and view-dependent shading
         features = torch.rand(N, feature_dim)  # [N, feature_dim]
@@ -351,7 +361,9 @@ class Runner:
 
         self.pose_optimizers = []
         if cfg.pose_opt:
-            self.pose_adjust = CameraOptModule(len(self.trainset)).to(self.device)
+            self.pose_adjust = CameraOptModule(len(self.trainset)).to(
+                self.device
+            )
             self.pose_adjust.zero_init()
             self.pose_optimizers = [
                 torch.optim.Adam(
@@ -362,13 +374,18 @@ class Runner:
             ]
 
         if cfg.pose_noise > 0.0:
-            self.pose_perturb = CameraOptModule(len(self.trainset)).to(self.device)
+            self.pose_perturb = CameraOptModule(len(self.trainset)).to(
+                self.device
+            )
             self.pose_perturb.random_init(cfg.pose_noise)
 
         self.app_optimizers = []
         if cfg.app_opt:
             self.app_module = AppearanceOptModule(
-                len(self.trainset), feature_dim, cfg.app_embed_dim, cfg.sh_degree
+                len(self.trainset),
+                feature_dim,
+                cfg.app_embed_dim,
+                cfg.sh_degree,
             ).to(self.device)
             # initialize the last layer to be zero so that the initial output is zero.
             torch.nn.init.zeros_(self.app_module.color_head[-1].weight)
@@ -386,7 +403,9 @@ class Runner:
             ]
 
         # Losses & Metrics.
-        self.ssim = StructuralSimilarityIndexMeasure(data_range=1.0).to(self.device)
+        self.ssim = StructuralSimilarityIndexMeasure(data_range=1.0).to(
+            self.device
+        )
         self.psnr = PeakSignalNoiseRatio(data_range=1.0).to(self.device)
         self.lpips = LearnedPerceptualImagePatchSimilarity(normalize=True).to(
             self.device
@@ -409,7 +428,7 @@ class Runner:
         width: int,
         height: int,
         **kwargs,
-    ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Dict]:
+    ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, dict]:
         means = self.splats["means"]  # [N, 3]
         # quats = F.normalize(self.splats["quats"], dim=-1)  # [N, 4]
         # rasterization does normalization internally
@@ -428,9 +447,13 @@ class Runner:
             colors = colors + self.splats["colors"]
             colors = torch.sigmoid(colors)
         else:
-            colors = torch.cat([self.splats["sh0"], self.splats["shN"]], 1)  # [N, K, 3]
+            colors = torch.cat(
+                [self.splats["sh0"], self.splats["shN"]], 1
+            )  # [N, K, 3]
 
-        assert self.cfg.antialiased is False, "Antialiased is not supported for 2DGS"
+        assert self.cfg.antialiased is False, (
+            "Antialiased is not supported for 2DGS"
+        )
 
         if self.model_type == "2dgs":
             (
@@ -539,10 +562,14 @@ class Runner:
                 trainloader_iter = iter(trainloader)
                 data = next(trainloader_iter)
 
-            camtoworlds = camtoworlds_gt = data["camtoworld"].to(device)  # [1, 4, 4]
+            camtoworlds = camtoworlds_gt = data["camtoworld"].to(
+                device
+            )  # [1, 4, 4]
             Ks = data["K"].to(device)  # [1, 3, 3]
             pixels = data["image"].to(device) / 255.0  # [1, H, W, 3]
-            num_train_rays_per_step = pixels.shape[0] * pixels.shape[1] * pixels.shape[2]
+            num_train_rays_per_step = (
+                pixels.shape[0] * pixels.shape[1] * pixels.shape[2]
+            )
             image_ids = data["image_id"].to(device)
             if cfg.depth_loss:
                 points = data["points"].to(device)  # [1, M, 2]
@@ -557,7 +584,9 @@ class Runner:
                 camtoworlds = self.pose_adjust(camtoworlds, image_ids)
 
             # sh schedule
-            sh_degree_to_use = min(step // cfg.sh_degree_interval, cfg.sh_degree)
+            sh_degree_to_use = min(
+                step // cfg.sh_degree_interval, cfg.sh_degree
+            )
 
             # forward
             (
@@ -566,7 +595,7 @@ class Runner:
                 normals,
                 normals_from_depth,
                 render_distort,
-                render_median,
+                _render_median,
                 info,
             ) = self.rasterize_splats(
                 camtoworlds=camtoworlds,
@@ -622,7 +651,9 @@ class Runner:
                 )  # [1, 1, M, 1]
                 depths = depths.squeeze(3).squeeze(1)  # [1, M]
                 # calculate loss in disparity space
-                disp = torch.where(depths > 0.0, 1.0 / depths, torch.zeros_like(depths))
+                disp = torch.where(
+                    depths > 0.0, 1.0 / depths, torch.zeros_like(depths)
+                )
                 disp_gt = 1.0 / depths_gt  # [1, M]
                 depthloss = F.l1_loss(disp, disp_gt) * self.scene_scale
                 loss += depthloss * cfg.depth_lambda
@@ -638,7 +669,9 @@ class Runner:
                 if len(normals_from_depth.shape) == 4:
                     normals_from_depth = normals_from_depth.squeeze(0)
                 normals_from_depth = normals_from_depth.permute((2, 0, 1))
-                normal_error = (1 - (normals * normals_from_depth).sum(dim=0))[None]
+                normal_error = (1 - (normals * normals_from_depth).sum(dim=0))[
+                    None
+                ]
                 normalloss = curr_normal_lambda * normal_error.mean()
                 loss += normalloss
 
@@ -668,14 +701,22 @@ class Runner:
                 self.writer.add_scalar("train/loss", loss.item(), step)
                 self.writer.add_scalar("train/l1loss", l1loss.item(), step)
                 self.writer.add_scalar("train/ssimloss", ssimloss.item(), step)
-                self.writer.add_scalar("train/num_GS", len(self.splats["means"]), step)
+                self.writer.add_scalar(
+                    "train/num_GS", len(self.splats["means"]), step
+                )
                 self.writer.add_scalar("train/mem", mem, step)
                 if cfg.depth_loss:
-                    self.writer.add_scalar("train/depthloss", depthloss.item(), step)
+                    self.writer.add_scalar(
+                        "train/depthloss", depthloss.item(), step
+                    )
                 if cfg.normal_loss:
-                    self.writer.add_scalar("train/normalloss", normalloss.item(), step)
+                    self.writer.add_scalar(
+                        "train/normalloss", normalloss.item(), step
+                    )
                 if cfg.dist_loss:
-                    self.writer.add_scalar("train/distloss", distloss.item(), step)
+                    self.writer.add_scalar(
+                        "train/distloss", distloss.item(), step
+                    )
                 if cfg.tb_save_image:
                     canvas = (
                         torch.cat([pixels, colors[..., :3]], dim=2)
@@ -698,9 +739,11 @@ class Runner:
 
             # Turn Gradients into Sparse Tensor before running optimizer
             if cfg.sparse_grad:
-                assert cfg.packed, "Sparse gradients only work with packed mode."
+                assert cfg.packed, (
+                    "Sparse gradients only work with packed mode."
+                )
                 gaussian_ids = info["gaussian_ids"]
-                for k in self.splats.keys():
+                for k in self.splats:
                     grad = self.splats[k].grad
                     if grad is None or grad.is_sparse:
                         continue
@@ -733,7 +776,9 @@ class Runner:
                     "num_GS": len(self.splats["means"]),
                 }
                 print("Step: ", step, stats)
-                with open(f"{self.stats_dir}/train_step{step:04d}.json", "w") as f:
+                with open(
+                    f"{self.stats_dir}/train_step{step:04d}.json", "w"
+                ) as f:
                     json.dump(stats, f)
                 torch.save(
                     {
@@ -807,7 +852,8 @@ class Runner:
             # write images
             canvas = torch.cat([pixels, colors], dim=2).squeeze(0).cpu().numpy()
             imageio.imwrite(
-                f"{self.render_dir}/val_{i:04d}.png", (canvas * 255).astype(np.uint8)
+                f"{self.render_dir}/val_{i:04d}.png",
+                (canvas * 255).astype(np.uint8),
             )
 
             # write median depths
@@ -816,7 +862,11 @@ class Runner:
             )
             # render_median = render_median.detach().cpu().squeeze(0).unsqueeze(-1).repeat(1, 1, 3).numpy()
             render_median = (
-                apply_float_colormap(render_median).detach().cpu().squeeze(0).numpy()
+                apply_float_colormap(render_median)
+                .detach()
+                .cpu()
+                .squeeze(0)
+                .numpy()
             )
 
             imageio.imwrite(
@@ -828,16 +878,19 @@ class Runner:
             normals = (normals * 0.5 + 0.5).squeeze(0).cpu().numpy()
             normals_output = (normals * 255).astype(np.uint8)
             imageio.imwrite(
-                f"{self.render_dir}/val_{i:04d}_normal_{step}.png", normals_output
+                f"{self.render_dir}/val_{i:04d}_normal_{step}.png",
+                normals_output,
             )
 
             # write normals from depth
             normals_from_depth *= alphas.squeeze(0).detach()
             normals_from_depth = (normals_from_depth * 0.5 + 0.5).cpu().numpy()
-            normals_from_depth = (normals_from_depth - np.min(normals_from_depth)) / (
-                np.max(normals_from_depth) - np.min(normals_from_depth)
+            normals_from_depth = (
+                normals_from_depth - np.min(normals_from_depth)
+            ) / (np.max(normals_from_depth) - np.min(normals_from_depth))
+            normals_from_depth_output = (normals_from_depth * 255).astype(
+                np.uint8
             )
-            normals_from_depth_output = (normals_from_depth * 255).astype(np.uint8)
             if len(normals_from_depth_output.shape) == 4:
                 normals_from_depth_output = normals_from_depth_output.squeeze(0)
             imageio.imwrite(
@@ -852,7 +905,11 @@ class Runner:
             dist_min = torch.min(render_dist)
             render_dist = (render_dist - dist_min) / (dist_max - dist_min)
             render_dist = (
-                apply_float_colormap(render_dist).detach().cpu().squeeze(0).numpy()
+                apply_float_colormap(render_dist)
+                .detach()
+                .cpu()
+                .squeeze(0)
+                .numpy()
             )
             imageio.imwrite(
                 f"{self.render_dir}/val_{i:04d}_distortions_{step}.png",
@@ -902,13 +959,19 @@ class Runner:
         camtoworlds = np.concatenate(
             [
                 camtoworlds,
-                np.repeat(np.array([[[0.0, 0.0, 0.0, 1.0]]]), len(camtoworlds), axis=0),
+                np.repeat(
+                    np.array([[[0.0, 0.0, 0.0, 1.0]]]), len(camtoworlds), axis=0
+                ),
             ],
             axis=1,
         )  # [N, 4, 4]
 
         camtoworlds = torch.from_numpy(camtoworlds).float().to(device)
-        K = torch.from_numpy(list(self.parser.Ks_dict.values())[0]).float().to(device)
+        K = (
+            torch.from_numpy(list(self.parser.Ks_dict.values())[0])
+            .float()
+            .to(device)
+        )
         width, height = list(self.parser.imsize_dict.values())[0]
 
         canvas_all = []
@@ -967,8 +1030,8 @@ class Runner:
             render_colors,
             render_alphas,
             render_normals,
-            normals_from_depth,
-            render_distort,
+            _normals_from_depth,
+            _render_distort,
             render_median,
             info,
         ) = self.rasterize_splats(
@@ -982,11 +1045,15 @@ class Runner:
             radius_clip=render_tab_state.radius_clip,
             eps2d=render_tab_state.eps2d,
             render_mode="RGB+ED",
-            backgrounds=torch.tensor([render_tab_state.backgrounds], device=self.device)
+            backgrounds=torch.tensor(
+                [render_tab_state.backgrounds], device=self.device
+            )
             / 255.0,
         )  # [1, H, W, 3]
         render_tab_state.total_gs_count = len(self.splats["means"])
-        render_tab_state.rendered_gs_count = (info["radii"] > 0).all(-1).sum().item()
+        render_tab_state.rendered_gs_count = (
+            (info["radii"] > 0).all(-1).sum().item()
+        )
 
         if render_tab_state.render_mode == "depth":
             # normalize depth to [0, 1]
@@ -1002,7 +1069,9 @@ class Runner:
             if render_tab_state.inverse:
                 depth_norm = 1 - depth_norm
             renders = (
-                apply_float_colormap(depth_norm, render_tab_state.colormap).cpu().numpy()
+                apply_float_colormap(depth_norm, render_tab_state.colormap)
+                .cpu()
+                .numpy()
             )
         elif render_tab_state.render_mode == "normal":
             render_normals = render_normals * 0.5 + 0.5  # normalize to [0, 1]
@@ -1010,7 +1079,9 @@ class Runner:
         elif render_tab_state.render_mode == "alpha":
             alpha = render_alphas[0, ..., 0:1]
             renders = (
-                apply_float_colormap(alpha, render_tab_state.colormap).cpu().numpy()
+                apply_float_colormap(alpha, render_tab_state.colormap)
+                .cpu()
+                .numpy()
             )
         else:
             render_colors = render_colors[0, ..., 0:3].clamp(0, 1)
@@ -1024,7 +1095,7 @@ def main(cfg: Config):
     if cfg.ckpt is not None:
         # run eval only
         ckpt = torch.load(cfg.ckpt, map_location=runner.device)
-        for k in runner.splats.keys():
+        for k in runner.splats:
             runner.splats[k].data = ckpt["splats"][k]
         runner.eval(step=ckpt["step"])
         runner.render_traj(step=ckpt["step"])

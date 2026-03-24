@@ -24,29 +24,28 @@ organization and maintainability.
 """
 
 import math
-from typing import Optional, Tuple
-from torch import Tensor
 
 import torch
+from torch import Tensor
 
-from ._math import (
-    _quat_inverse,
-    _quat_to_rotmat,
-    _safe_normalize,
-    _quat_scale_to_preci_half,
-)
-from ._torch_cameras import (
-    _viewmat_to_pose,
-    _pose_camera_world_position,
-    _PerfectPinholeCameraModel,
-    _interpolate_shutter_pose,
-)
-from ._wrapper import RollingShutterType
 from ._constants import (
     ALPHA_THRESHOLD,
-    TRANSMITTANCE_THRESHOLD,
     MAX_KERNEL_DENSITY_CUTOFF,
+    TRANSMITTANCE_THRESHOLD,
 )
+from ._math import (
+    _quat_inverse,
+    _quat_scale_to_preci_half,
+    _quat_to_rotmat,
+    _safe_normalize,
+)
+from ._torch_cameras import (
+    _interpolate_shutter_pose,
+    _PerfectPinholeCameraModel,
+    _pose_camera_world_position,
+    _viewmat_to_pose,
+)
+from ._wrapper import RollingShutterType
 
 
 def _generate_rays_from_pixels(
@@ -55,9 +54,8 @@ def _generate_rays_from_pixels(
     R_cam_to_world: Tensor,  # [..., N, 3, 3]
     Ks: Tensor,  # [..., N, 3, 3]
     means_dtype: torch.dtype,
-) -> Tuple[Tensor, Tensor]:
-    """
-    Generate ray origins and directions from pixel coordinates.
+) -> tuple[Tensor, Tensor]:
+    """Generate ray origins and directions from pixel coordinates.
 
     Args:
         pixel_coords: Pixel coordinates [..., N, 2] as (x, y) - already at pixel centers
@@ -94,7 +92,9 @@ def _generate_rays_from_pixels(
     ray_d_cam = _safe_normalize(ray_d_cam)  # [..., N, 3]
 
     # Transform rays to world space: R @ v
-    ray_d = torch.matmul(R_cam_to_world, ray_d_cam[..., None]).squeeze(-1)  # [..., 3]
+    ray_d = torch.matmul(R_cam_to_world, ray_d_cam[..., None]).squeeze(
+        -1
+    )  # [..., 3]
 
     return cam_centers, ray_d
 
@@ -103,8 +103,7 @@ def _compute_gaussian_transform(
     quats_flat: Tensor,  # [..., N, 4]
     scales_flat: Tensor,  # [..., N, 3]
 ) -> Tensor:
-    """
-    Compute Gaussian transformation matrices for ray-based evaluation.
+    """Compute Gaussian transformation matrices for ray-based evaluation.
 
     Transforms Gaussians from (rotation, scale) representation to
     inverse scale-rotation matrices (M^T) used for efficient ray-Gaussian
@@ -123,7 +122,9 @@ def _compute_gaussian_transform(
 
     # Compute M = R * (1/scales)
     M_preci_half = _quat_scale_to_preci_half(quats_flat, scales_flat)
-    assert torch.all(torch.isfinite(M_preci_half)), "Non-finite values in M_preci_half"
+    assert torch.all(torch.isfinite(M_preci_half)), (
+        "Non-finite values in M_preci_half"
+    )
 
     # Transpose: iscl_rot = M^T
     iscl_rot = M_preci_half.transpose(-2, -1)
@@ -137,10 +138,8 @@ def _compute_ray_gaussian_distance(
     xyz: Tensor,  # [..., N, 3]
     iscl_rot: Tensor,  # [..., N, 3, 3]
     scale: Tensor,  # [..., N, 3]
-) -> Tuple[Tensor, Tensor]:
-    """
-    Compute squared distance from ray to Gaussian center in transformed space,
-    and hit distance in camera space.
+) -> tuple[Tensor, Tensor]:
+    """Compute squared distance from ray to Gaussian center in transformed space and hit distance in camera space.
 
     Uses the inverse scale-rotation matrix to transform the ray into
     Gaussian-local space, then computes the minimum distance from the
@@ -151,13 +150,16 @@ def _compute_ray_gaussian_distance(
         ray_d: Ray directions [..., N, 3] (normalized)
         xyz: Gaussian centers [..., N, 3]
         iscl_rot: Inverse scale-rotation matrices [..., N, 3, 3]
+        scale: Gaussian scales [..., N, 3]
 
     Returns:
         grayDist: [..., N] - Squared distance from ray to Gaussian center
         hitDist: [..., N] - Hit distance in camera space
     """
     # Transform ray origin and direction to Gaussian space
-    gro = torch.matmul(iscl_rot, (ray_o - xyz)[..., None]).squeeze(-1)  # [..., 3]
+    gro = torch.matmul(iscl_rot, (ray_o - xyz)[..., None]).squeeze(
+        -1
+    )  # [..., 3]
     grd = torch.matmul(iscl_rot, ray_d[..., None]).squeeze(-1)  # [..., 3]
 
     # Safe normalization
@@ -180,8 +182,7 @@ def _compute_gaussian_alphas(
     opac: Tensor,  # [..., M]
     trans_threshold: float,
 ) -> Tensor:
-    """
-    Compute Gaussian alpha values from ray-Gaussian distances.
+    """Compute Gaussian alpha values from ray-Gaussian distances.
 
     Converts ray-Gaussian distances to alpha values using the Gaussian
     exponential function with clamping to prevent numerical issues.
@@ -228,14 +229,14 @@ def accumulate_eval3d(
     image_height: int,
     flatten_idx: Tensor,  # [M] - index in original flatten_ids
     rs_type: RollingShutterType = RollingShutterType.GLOBAL,  # Rolling shutter type
-    rays: Optional[Tensor] = None,  # [..., C, P, 6]
-    viewmats_rs: Optional[Tensor] = None,  # [..., 4, 4] - optional for rolling shutter
-    base_transmittance: Optional[
-        Tensor
-    ] = None,  # [I, image_height, image_width] - base transmittance for batched accumulation
+    rays: Tensor | None = None,  # [..., C, P, 6]
+    viewmats_rs: Tensor
+    | None = None,  # [..., 4, 4] - optional for rolling shutter
+    base_transmittance: Tensor
+    | None = None,  # [I, image_height, image_width] - base transmittance for batched accumulation
     use_hit_distance: bool = False,
     return_normals: bool = False,  # Whether to compute normals
-) -> Tuple[Tensor, Tensor, Tensor, Tensor, Optional[Tensor]]:
+) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor | None]:
     """Alpha compositing with ray-based 3D Gaussian evaluation in Pure PyTorch.
 
     Similar to accumulate(), but computes Gaussian responses in 3D world space
@@ -263,6 +264,9 @@ def accumulate_eval3d(
         base_transmittance: Optional base transmittance for batched accumulation.
                            Shape: [I, image_height, image_width]. If provided,
                            this is used as the starting transmittance for filtering.
+        rays: Optional precomputed rays [..., C, P, 6] (origin + direction).
+        use_hit_distance: If True, use hit distance for depth computation.
+        return_normals: If True, compute and return accumulated normals.
 
     Returns:
         - **renders**: Accumulated colors. [..., image_height, image_width, channels]
@@ -317,9 +321,13 @@ def accumulate_eval3d(
         if viewmats_rs is None:
             pose = pose_start
         else:
-            relative_time = camera.shutter_relative_frame_time(pixel_coords)  # [M, 1]
+            relative_time = camera.shutter_relative_frame_time(
+                pixel_coords
+            )  # [M, 1]
             pose_end = _viewmat_to_pose(viewmats_rs[image_ids])
-            pose = _interpolate_shutter_pose(pose_start, pose_end, relative_time)
+            pose = _interpolate_shutter_pose(
+                pose_start, pose_end, relative_time
+            )
 
         pose_q = pose[..., 3:]
 
@@ -329,7 +337,11 @@ def accumulate_eval3d(
 
         # 4. Generate rays from pixels
         ray_o, ray_d = _generate_rays_from_pixels(
-            pixel_coords, cam_centers, R_cam_to_world, Ks[image_ids], means.dtype
+            pixel_coords,
+            cam_centers,
+            R_cam_to_world,
+            Ks[image_ids],
+            means.dtype,
         )  # [M, 3, 1]
     else:
         ray_indices = image_ids * image_height * image_width + pixel_ids
@@ -338,7 +350,9 @@ def accumulate_eval3d(
         ray_d = rays_flat[ray_indices, 3:]
 
     # 5. Compute Gaussian transform to map Gaussians to world space
-    iscl_rot = _compute_gaussian_transform(quats_flat, scales_flat)  # [B, N, 3, 3]
+    iscl_rot = _compute_gaussian_transform(
+        quats_flat, scales_flat
+    )  # [B, N, 3, 3]
 
     # 6. Get Gaussian parameters for all M intersections
     # Extract batch index from image_ids (image_ids = batch_id * C + camera_id)
@@ -380,7 +394,9 @@ def accumulate_eval3d(
     # 7b. Replace last channel with hit distance if requested (matches CUDA behavior)
     # CUDA: const float value = (k == CDIM - 1) ? hit_distance : c_ptr[k];
     if use_hit_distance:
-        gauss_colors = torch.cat([gauss_colors[..., :-1], hitDist[..., None]], dim=-1)
+        gauss_colors = torch.cat(
+            [gauss_colors[..., :-1], hitDist[..., None]], dim=-1
+        )
 
     # 8. Compute Gaussian alphas
     alphas, max_response = _compute_gaussian_alphas(
@@ -389,7 +405,9 @@ def accumulate_eval3d(
 
     # 9. Filter out low-contribution Gaussians (explicit masking)
     # CUDA: if (alpha < 1.f / 255.f) continue;
-    valid_mask = (alphas >= ALPHA_THRESHOLD) & (max_response > MAX_KERNEL_DENSITY_CUTOFF)
+    valid_mask = (alphas >= ALPHA_THRESHOLD) & (
+        max_response > MAX_KERNEL_DENSITY_CUTOFF
+    )
 
     # Apply filter to all arrays early to reduce memory usage
     alphas = alphas[valid_mask]
@@ -420,7 +438,9 @@ def accumulate_eval3d(
     # Apply base_transmittance if provided (for batched accumulation)
     if base_transmittance is not None:
         # Get per-sample base transmittance by indexing with pixel/image IDs
-        base_trans_flat = base_transmittance.reshape(I * image_height * image_width)
+        base_trans_flat = base_transmittance.reshape(
+            I * image_height * image_width
+        )
         base_trans_per_sample = base_trans_flat[ray_indices]
 
         # Multiply trans by base transmittance
@@ -474,7 +494,9 @@ def accumulate_eval3d(
     last_ids[has_samples] = flatten_idx[last_positions[has_samples]].int()
 
     # Compute sample counts per pixel (from packed_info)
-    sample_counts = chunk_cnts.int()  # [total_pixels] - number of samples per ray
+    sample_counts = (
+        chunk_cnts.int()
+    )  # [total_pixels] - number of samples per ray
 
     # Reshape: total_pixels = I * H * W, so reshape as [I, H, W, ...]
     renders = renders.reshape(I, image_height, image_width, channels)
@@ -503,13 +525,12 @@ def _rasterize_to_pixels_eval3d(
     tile_size: int,
     isect_offsets: Tensor,  # [..., C, tile_height, tile_width]
     flatten_ids: Tensor,  # [n_isects]
-    backgrounds: Optional[Tensor] = None,  # [..., C, channels]
+    backgrounds: Tensor | None = None,  # [..., C, channels]
     batch_per_iter: int = 200,
     rs_type: RollingShutterType = RollingShutterType.GLOBAL,  # Rolling shutter type
-    rays: Optional[Tensor] = None,  # [..., C, H, W, 6]
-    viewmats_rs: Optional[
-        Tensor
-    ] = None,  # [..., C, 4, 4] - optional for rolling shutter
+    rays: Tensor | None = None,  # [..., C, H, W, 6]
+    viewmats_rs: Tensor
+    | None = None,  # [..., C, 4, 4] - optional for rolling shutter
     return_last_ids: bool = False,
     return_sample_counts: bool = False,
     use_hit_distance: bool = False,
@@ -539,16 +560,28 @@ def _rasterize_to_pixels_eval3d(
         This function requires the `nerfacc` package to be installed.
 
     Args:
+        means: Gaussian means in 3D world space [..., N, 3]
+        quats: Gaussian rotations as quaternions [..., N, 4]
+        scales: Gaussian scales [..., N, 3]
+        colors: Gaussian colors [..., C, N, channels]
+        opacities: Gaussian opacities [..., C, N]
+        viewmats: Camera view matrices [..., C, 4, 4]
+        Ks: Camera intrinsics [..., C, 3, 3]
+        image_width: Image width in pixels
+        image_height: Image height in pixels
         tile_size: Size of tiles for culling (e.g., 16)
         isect_offsets: Tile intersection offsets from isect_offset_encode
         flatten_ids: Flattened Gaussian IDs from isect_tiles
+        backgrounds: Optional background colors [..., C, channels]
         batch_per_iter: Batch size for iterative processing
         viewmats_rs: Optional end pose for rolling shutter [..., C, 4, 4]
         rs_type: Rolling shutter type
+        rays: Optional precomputed rays [..., C, H, W, 6] (origin + direction)
         return_last_ids: If True, return the index of the last Gaussian contributing
             to each pixel. Default: False.
         return_sample_counts: If True, return the number of samples (Gaussians)
             evaluated per pixel. Default: False.
+        use_hit_distance: If True, use hit distance for depth computation.
         return_normals: If True, compute and return accumulated normals per pixel.
             Normals are computed from Gaussian quaternions (canonical normal = (0,0,1)
             transformed by rotation, flipped if facing away from ray). Default: False.
@@ -562,7 +595,6 @@ def _rasterize_to_pixels_eval3d(
         - Various combinations if multiple flags are True
         The order is always: colors, alphas, [last_ids], [sample_counts], [normals]
     """
-
     # Get dimensions - treat [..., C, N, ...] as flattened images
     batch_dims = means.shape[:-2]
     N = means.shape[-2]
@@ -583,7 +615,9 @@ def _rasterize_to_pixels_eval3d(
     colors_exp = colors.reshape(I, N, channels)
     opacities_exp = opacities.reshape(I, N)
     viewmats_exp = viewmats.reshape(I, 4, 4)
-    viewmats_rs_exp = viewmats_rs.reshape(I, 4, 4) if viewmats_rs is not None else None
+    viewmats_rs_exp = (
+        viewmats_rs.reshape(I, 4, 4) if viewmats_rs is not None else None
+    )
     Ks_exp = Ks.reshape(I, 3, 3)
     isect_offsets_exp = isect_offsets.reshape(
         I, isect_offsets.shape[-2], isect_offsets.shape[-1]
@@ -613,8 +647,12 @@ def _rasterize_to_pixels_eval3d(
     num_batches = (max_range + batch_per_iter - 1) // batch_per_iter
 
     # Initialize outputs
-    render_colors = torch.zeros((I, image_height, image_width, channels), device=device)
-    render_alphas = torch.zeros((I, image_height, image_width, 1), device=device)
+    render_colors = torch.zeros(
+        (I, image_height, image_width, channels), device=device
+    )
+    render_alphas = torch.zeros(
+        (I, image_height, image_width, 1), device=device
+    )
     last_ids = torch.full(
         (I, image_height, image_width), -1, dtype=torch.int32, device=device
     )
@@ -657,7 +695,9 @@ def _rasterize_to_pixels_eval3d(
             for ty in range(tile_height):
                 for tx in range(tile_width):
                     # Flattened tile index (matches CUDA)
-                    tile_idx = img_id * tile_height * tile_width + ty * tile_width + tx
+                    tile_idx = (
+                        img_id * tile_height * tile_width + ty * tile_width + tx
+                    )
 
                     # Get start/end from flattened offsets (matches CUDA pattern)
                     start_idx = int(isect_offsets_cpu[tile_idx])
@@ -705,7 +745,9 @@ def _rasterize_to_pixels_eval3d(
                         torch.arange(px_start, px_end, device=device),
                         indexing="ij",
                     )
-                    pix_ids_in_tile = py_grid.flatten() * image_width + px_grid.flatten()
+                    pix_ids_in_tile = (
+                        py_grid.flatten() * image_width + px_grid.flatten()
+                    )
                     num_pixels = len(pix_ids_in_tile)
 
                     # Create flatten_ids indices for this batch
@@ -729,7 +771,9 @@ def _rasterize_to_pixels_eval3d(
                             dtype=torch.long,
                         )
                     )
-                    all_flatten_idx.append(batch_flatten_indices.repeat(num_pixels))
+                    all_flatten_idx.append(
+                        batch_flatten_indices.repeat(num_pixels)
+                    )
 
         # Concatenate batch lists
         if not all_gs_ids:
@@ -741,7 +785,9 @@ def _rasterize_to_pixels_eval3d(
         batch_flatten_idx = torch.cat(all_flatten_idx)
 
         # Sort by ray index (required by nerfacc)
-        ray_sort_key = batch_img_ids * (image_height * image_width) + batch_pix_ids
+        ray_sort_key = (
+            batch_img_ids * (image_height * image_width) + batch_pix_ids
+        )
         sort_indices = torch.argsort(ray_sort_key, stable=True)
         batch_gs_ids = batch_gs_ids[sort_indices]
         batch_pix_ids = batch_pix_ids[sort_indices]
@@ -783,7 +829,9 @@ def _rasterize_to_pixels_eval3d(
 
         # Composite normals (same accumulation pattern as colors)
         if normals_step is not None and render_normals is not None:
-            render_normals = render_normals + normals_step * transmittances[..., None]
+            render_normals = (
+                render_normals + normals_step * transmittances[..., None]
+            )
 
         # Update last_ids (keep most recent non-(-1) value)
         last_ids = torch.where(last_ids_step >= 0, last_ids_step, last_ids)
@@ -795,9 +843,13 @@ def _rasterize_to_pixels_eval3d(
     render_colors = render_colors.reshape(
         batch_dims + (C, image_height, image_width, channels)
     )
-    render_alphas = render_alphas.reshape(batch_dims + (C, image_height, image_width, 1))
+    render_alphas = render_alphas.reshape(
+        batch_dims + (C, image_height, image_width, 1)
+    )
     last_ids = last_ids.reshape(batch_dims + (C, image_height, image_width))
-    sample_counts = sample_counts.reshape(batch_dims + (C, image_height, image_width))
+    sample_counts = sample_counts.reshape(
+        batch_dims + (C, image_height, image_width)
+    )
     if render_normals is not None:
         render_normals = render_normals.reshape(
             batch_dims + (C, image_height, image_width, 3)

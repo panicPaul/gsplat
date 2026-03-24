@@ -23,19 +23,17 @@ pytest <THIS_PY_FILE> -s
 """
 
 import os
-from typing import Tuple
 
+import gsplat
 import pytest
 import torch
-import gsplat
-
 from gsplat._helper import load_test_data
 from gsplat.rendering import RenderMode
 
 device = torch.device("cuda:0")
 
 
-def expand(data: dict, batch_dims: Tuple[int, ...]):
+def expand(data: dict, batch_dims: tuple[int, ...]):
     # append multiple batch dimensions to the front of the tensor
     # eg. x.shape = [N, 3], batch_dims = (1, 2), return shape is [1, 2, N, 3]
     # eg. x.shape = [N, 3], batch_dims = (), return shape is [N, 3]
@@ -63,7 +61,9 @@ def test_data():
         height,
     ) = load_test_data(
         device=device,
-        data_path=os.path.join(os.path.dirname(__file__), "../assets/test_garden.npz"),
+        data_path=os.path.join(
+            os.path.dirname(__file__), "../assets/test_garden.npz"
+        ),
     )
     return {
         "means": means,  # [N, 3]
@@ -79,16 +79,18 @@ def test_data():
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="No CUDA device")
-@pytest.mark.skipif(not gsplat.has_3dgut(), reason="3DGUT support isn't built in")
+@pytest.mark.skipif(
+    not gsplat.has_3dgut(), reason="3DGUT support isn't built in"
+)
 @pytest.mark.parametrize("render_mode", ["RGB"])
 def test_rasterization(
     test_data,
     render_mode: RenderMode,
 ):
     from gsplat.rendering import (
-        rasterization,
         FThetaCameraDistortionParameters,
         FThetaPolynomialType,
+        rasterization,
     )
 
     torch.manual_seed(42)
@@ -129,7 +131,7 @@ def test_rasterization(
         linear_cde=(9.9968284e-01, 1.8735906e-05, 1.7659619e-05),
     )
 
-    renders, alphas, meta = rasterization(
+    renders, _alphas, _meta = rasterization(
         means=means,
         quats=quats,
         scales=scales,

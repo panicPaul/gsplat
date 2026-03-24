@@ -23,52 +23,42 @@ pytest <THIS_PY_FILE> -s
 """
 
 import math
-import struct
 import os
+import struct
 from itertools import chain, product
 from types import SimpleNamespace
+from typing import assert_never
 
+import gsplat
 import pytest
 import torch
-from typing_extensions import Literal, Tuple, assert_never
-import torch.nn.functional as F
-
 from gsplat._helper import (
-    load_test_data,
-    get_inlier_abserror_mask,
     assert_mismatch_ratio,
+    get_inlier_abserror_mask,
+    load_test_data,
 )
-import gsplat
-
 from gsplat.cuda._backend import _C
 
 if _C is None:
     pytest.skip("gsplat CUDA extension not available", allow_module_level=True)
 
-from gsplat._helper import (
-    load_test_data,
-    get_inlier_abserror_mask,
-    assert_mismatch_ratio,
-)
 
+from gsplat.cuda._constants import ALPHA_THRESHOLD
+from gsplat.cuda._torch_cameras import _viewmat_to_pose
+from gsplat.cuda._torch_impl_lidar import ANGLE_TO_PIXEL_SCALING_FACTOR
 from gsplat.cuda._wrapper import (
     CameraModel,
     RollingShutterType,
     UnscentedTransformParameters,
-    _make_lazy_cuda_cls,
-    has_camera_wrappers,
     create_camera_model,
+    has_camera_wrappers,
 )
-from gsplat.cuda._math import _safe_normalize
-from gsplat.cuda._torch_cameras import _viewmat_to_pose
-from gsplat.cuda._constants import ALPHA_THRESHOLD
 from tests.test_cameras import parse_lidar_camera
-from gsplat.cuda._torch_impl_lidar import ANGLE_TO_PIXEL_SCALING_FACTOR
 
 device = torch.device("cuda:0")
 
 
-def expand(data: dict, batch_dims: Tuple[int, ...]):
+def expand(data: dict, batch_dims: tuple[int, ...]):
     # append multiple batch dimensions to the front of the tensor
     # eg. x.shape = [N, 3], batch_dims = (1, 2), return shape is [1, 2, N, 3]
     # eg. x.shape = [N, 3], batch_dims = (), return shape is [N, 3]
@@ -89,14 +79,16 @@ def test_data():
         quats,
         scales,
         opacities,
-        colors,
+        _colors,
         viewmats,
         Ks,
         width,
         height,
     ) = load_test_data(
         device=device,
-        data_path=os.path.join(os.path.dirname(__file__), "../assets/test_garden.npz"),
+        data_path=os.path.join(
+            os.path.dirname(__file__), "../assets/test_garden.npz"
+        ),
     )
     return {
         "means": means,  # [N, 3]
@@ -114,7 +106,9 @@ def test_data():
 @pytest.mark.skipif(not gsplat.has_3dgs(), reason="3DGS support isn't built in")
 @pytest.mark.parametrize("triu", [False, True])
 @pytest.mark.parametrize("batch_dims", [(), (2,), (1, 2)])
-def test_quat_scale_to_covar_preci(test_data, triu: bool, batch_dims: Tuple[int, ...]):
+def test_quat_scale_to_covar_preci(
+    test_data, triu: bool, batch_dims: tuple[int, ...]
+):
     from gsplat.cuda._math import _quat_scale_to_covar_preci
     from gsplat.cuda._wrapper import quat_scale_to_covar_preci
 
@@ -159,7 +153,7 @@ def test_quat_scale_to_covar_preci(test_data, triu: bool, batch_dims: Tuple[int,
 def test_proj(
     test_data,
     camera_model: CameraModel,
-    batch_dims: Tuple[int, ...],
+    batch_dims: tuple[int, ...],
 ):
     from gsplat.cuda._torch_impl import (
         _fisheye_proj,
@@ -177,7 +171,9 @@ def test_proj(
     height = test_data["height"]
     width = test_data["width"]
 
-    covars, _ = quat_scale_to_covar_preci(test_data["quats"], test_data["scales"])
+    covars, _ = quat_scale_to_covar_preci(
+        test_data["quats"], test_data["scales"]
+    )
     means, covars = _world_to_cam(test_data["means"], covars, viewmats)
     means.requires_grad = True
     covars.requires_grad = True
@@ -222,10 +218,13 @@ def test_projection(
     fused: bool,
     calc_compensations: bool,
     camera_model: CameraModel,
-    batch_dims: Tuple[int, ...],
+    batch_dims: tuple[int, ...],
 ):
     from gsplat.cuda._torch_impl import _fully_fused_projection
-    from gsplat.cuda._wrapper import fully_fused_projection, quat_scale_to_covar_preci
+    from gsplat.cuda._wrapper import (
+        fully_fused_projection,
+        quat_scale_to_covar_preci,
+    )
 
     torch.manual_seed(42)
 
@@ -258,7 +257,9 @@ def test_projection(
             camera_model=camera_model,
         )
     else:
-        covars, _ = quat_scale_to_covar_preci(quats, scales, triu=True)  # [..., N, 6]
+        covars, _ = quat_scale_to_covar_preci(
+            quats, scales, triu=True
+        )  # [..., N, 6]
         radii, means2d, depths, conics, compensations = fully_fused_projection(
             means,
             covars,
@@ -271,24 +272,34 @@ def test_projection(
             calc_compensations=calc_compensations,
             camera_model=camera_model,
         )
-    _covars, _ = quat_scale_to_covar_preci(quats, scales, triu=False)  # [..., N, 3, 3]
-    _radii, _means2d, _depths, _conics, _compensations = _fully_fused_projection(
-        means,
-        _covars,
-        viewmats,
-        Ks,
-        width,
-        height,
-        calc_compensations=calc_compensations,
-        camera_model=camera_model,
+    _covars, _ = quat_scale_to_covar_preci(
+        quats, scales, triu=False
+    )  # [..., N, 3, 3]
+    _radii, _means2d, _depths, _conics, _compensations = (
+        _fully_fused_projection(
+            means,
+            _covars,
+            viewmats,
+            Ks,
+            width,
+            height,
+            calc_compensations=calc_compensations,
+            camera_model=camera_model,
+        )
     )
 
     # radii is integer so we allow for 1 unit difference
     valid = (radii > 0).all(dim=-1) & (_radii > 0).all(dim=-1)
     torch.testing.assert_close(radii, _radii, rtol=0, atol=1)
-    torch.testing.assert_close(means2d[valid], _means2d[valid], rtol=1e-4, atol=1e-4)
-    torch.testing.assert_close(depths[valid], _depths[valid], rtol=1e-4, atol=1e-4)
-    torch.testing.assert_close(conics[valid], _conics[valid], rtol=1e-4, atol=1e-4)
+    torch.testing.assert_close(
+        means2d[valid], _means2d[valid], rtol=1e-4, atol=1e-4
+    )
+    torch.testing.assert_close(
+        depths[valid], _depths[valid], rtol=1e-4, atol=1e-4
+    )
+    torch.testing.assert_close(
+        conics[valid], _conics[valid], rtol=1e-4, atol=1e-4
+    )
     if calc_compensations:
         torch.testing.assert_close(
             compensations[valid], _compensations[valid], rtol=1e-4, atol=1e-3
@@ -304,14 +315,20 @@ def test_projection(
         (means2d * v_means2d).sum()
         + (depths * v_depths).sum()
         + (conics * v_conics).sum()
-        + ((compensations * v_compensations).sum() if calc_compensations else 0),
+        + (
+            (compensations * v_compensations).sum() if calc_compensations else 0
+        ),
         (viewmats, quats, scales, means),
     )
     _v_viewmats, _v_quats, _v_scales, _v_means = torch.autograd.grad(
         (_means2d * v_means2d).sum()
         + (_depths * v_depths).sum()
         + (_conics * v_conics).sum()
-        + ((_compensations * v_compensations).sum() if calc_compensations else 0),
+        + (
+            (_compensations * v_compensations).sum()
+            if calc_compensations
+            else 0
+        ),
         (viewmats, quats, scales, means),
     )
 
@@ -337,9 +354,12 @@ def test_fully_fused_projection_packed(
     sparse_grad: bool,
     calc_compensations: bool,
     camera_model: CameraModel,
-    batch_dims: Tuple[int, ...],
+    batch_dims: tuple[int, ...],
 ):
-    from gsplat.cuda._wrapper import fully_fused_projection, quat_scale_to_covar_preci
+    from gsplat.cuda._wrapper import (
+        fully_fused_projection,
+        quat_scale_to_covar_preci,
+    )
 
     torch.manual_seed(42)
 
@@ -363,7 +383,7 @@ def test_fully_fused_projection_packed(
             batch_ids,
             camera_ids,
             gaussian_ids,
-            indptr,
+            _,  # indptr,
             radii,
             means2d,
             depths,
@@ -383,26 +403,30 @@ def test_fully_fused_projection_packed(
             calc_compensations=calc_compensations,
             camera_model=camera_model,
         )
-        _radii, _means2d, _depths, _conics, _compensations = fully_fused_projection(
-            means,
-            None,
-            quats,
-            scales,
-            viewmats,
-            Ks,
-            width,
-            height,
-            packed=False,
-            calc_compensations=calc_compensations,
-            camera_model=camera_model,
+        _radii, _means2d, _depths, _conics, _compensations = (
+            fully_fused_projection(
+                means,
+                None,
+                quats,
+                scales,
+                viewmats,
+                Ks,
+                width,
+                height,
+                packed=False,
+                calc_compensations=calc_compensations,
+                camera_model=camera_model,
+            )
         )
     else:
-        covars, _ = quat_scale_to_covar_preci(quats, scales, triu=True)  # [..., N, 6]
+        covars, _ = quat_scale_to_covar_preci(
+            quats, scales, triu=True
+        )  # [..., N, 6]
         (
             batch_ids,
             camera_ids,
             gaussian_ids,
-            indptr,
+            _indptr,
             radii,
             means2d,
             depths,
@@ -422,18 +446,20 @@ def test_fully_fused_projection_packed(
             calc_compensations=calc_compensations,
             camera_model=camera_model,
         )
-        _radii, _means2d, _depths, _conics, _compensations = fully_fused_projection(
-            means,
-            covars,
-            None,
-            None,
-            viewmats,
-            Ks,
-            width,
-            height,
-            packed=False,
-            calc_compensations=calc_compensations,
-            camera_model=camera_model,
+        _radii, _means2d, _depths, _conics, _compensations = (
+            fully_fused_projection(
+                means,
+                covars,
+                None,
+                None,
+                viewmats,
+                Ks,
+                width,
+                height,
+                packed=False,
+                calc_compensations=calc_compensations,
+                camera_model=camera_model,
+            )
         )
 
     B = math.prod(batch_dims)
@@ -446,7 +472,9 @@ def test_fully_fused_projection_packed(
     ).to_dense()
     __radii = __radii.reshape(batch_dims + (C, N, 2))
     __means2d = torch.sparse_coo_tensor(
-        torch.stack([batch_ids, camera_ids, gaussian_ids]), means2d, (B, C, N, 2)
+        torch.stack([batch_ids, camera_ids, gaussian_ids]),
+        means2d,
+        (B, C, N, 2),
     ).to_dense()
     __means2d = __means2d.reshape(batch_dims + (C, N, 2))
     __depths = torch.sparse_coo_tensor(
@@ -466,9 +494,15 @@ def test_fully_fused_projection_packed(
         __compensations = __compensations.reshape(batch_dims + (C, N))
     sel = (__radii > 0).all(dim=-1) & (_radii > 0).all(dim=-1)
     torch.testing.assert_close(__radii[sel], _radii[sel], rtol=0, atol=1)
-    torch.testing.assert_close(__means2d[sel], _means2d[sel], rtol=1e-4, atol=1e-4)
-    torch.testing.assert_close(__depths[sel], _depths[sel], rtol=1e-4, atol=1e-4)
-    torch.testing.assert_close(__conics[sel], _conics[sel], rtol=1e-4, atol=1e-4)
+    torch.testing.assert_close(
+        __means2d[sel], _means2d[sel], rtol=1e-4, atol=1e-4
+    )
+    torch.testing.assert_close(
+        __depths[sel], _depths[sel], rtol=1e-4, atol=1e-4
+    )
+    torch.testing.assert_close(
+        __conics[sel], _conics[sel], rtol=1e-4, atol=1e-4
+    )
     if calc_compensations:
         torch.testing.assert_close(
             __compensations[sel], _compensations[sel], rtol=1e-4, atol=1e-3
@@ -506,7 +540,9 @@ def test_fully_fused_projection_packed(
 @pytest.mark.skipif(
     not torch.cuda.is_available(), reason="CUDA required for UT projection"
 )
-@pytest.mark.skipif(not gsplat.has_3dgut(), reason="3DGUT support isn't built in")
+@pytest.mark.skipif(
+    not gsplat.has_3dgut(), reason="3DGUT support isn't built in"
+)
 @pytest.mark.parametrize("batch_dims", [(), (2,), (1, 2)])
 @pytest.mark.parametrize(
     "require_all_valid", [True, False], ids=["allvalid", "somevalid"]
@@ -518,7 +554,7 @@ def test_fully_fused_projection_packed(
 @pytest.mark.parametrize("global_z_order", [True, False])
 def test_fully_fused_projection_ut(
     test_data,
-    batch_dims: Tuple[int, ...],
+    batch_dims: tuple[int, ...],
     require_all_valid: bool,
     rolling_shutter: RollingShutterType,
     global_z_order: bool,
@@ -618,7 +654,7 @@ def test_fully_fused_projection_ut(
 
     sel = cuda_sel & torch_sel
 
-    assert sel.any(), f"No valid Gaussians found"
+    assert sel.any(), "No valid Gaussians found"
 
     # ========================================================================
     # ASSERTIONS: Compare outputs with appropriate tolerances
@@ -631,12 +667,13 @@ def test_fully_fused_projection_ut(
     if rolling_shutter == RollingShutterType.GLOBAL:
         radii_atol = 2.0  # Only ceil() differences for global shutter
     else:
-        radii_atol = (
-            10.0  # Rolling shutter: iterative refinement amplifies FP32 differences
-        )
+        radii_atol = 10.0  # Rolling shutter: iterative refinement amplifies FP32 differences
 
     torch.testing.assert_close(
-        radii_cuda[sel].float(), radii_torch[sel].float(), rtol=0, atol=radii_atol
+        radii_cuda[sel].float(),
+        radii_torch[sel].float(),
+        rtol=0,
+        atol=radii_atol,
     )
 
     # means2d: Sub-pixel precision expected
@@ -680,7 +717,10 @@ def test_fully_fused_projection_ut(
     # Small differences in determinants can cause larger differences in sqrt ratio
     # Rolling shutter: changes in 2D covariance determinant cascade through compensation
     if rolling_shutter == RollingShutterType.GLOBAL:
-        comps_rtol, comps_atol = 0.1, 0.01  # Global: max_abs=0.0034, max_rel=4.3%
+        comps_rtol, comps_atol = (
+            0.1,
+            0.01,
+        )  # Global: max_abs=0.0034, max_rel=4.3%
     else:
         comps_rtol, comps_atol = (
             0.25,
@@ -693,9 +733,11 @@ def test_fully_fused_projection_ut(
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="No CUDA device")
-@pytest.mark.skipif(not gsplat.has_3dgut(), reason="3DGUT/Lidar support isn't built in")
+@pytest.mark.skipif(
+    not gsplat.has_3dgut(), reason="3DGUT/Lidar support isn't built in"
+)
 @pytest.mark.parametrize("batch_dims", [(), (2,), (1, 2)])
-def test_isect(test_data, batch_dims: Tuple[int, ...]):
+def test_isect(test_data, batch_dims: tuple[int, ...]):
     from gsplat.cuda._torch_impl import _isect_offset_encode, _isect_tiles
     from gsplat.cuda._wrapper import isect_offset_encode, isect_tiles
 
@@ -708,7 +750,9 @@ def test_isect(test_data, batch_dims: Tuple[int, ...]):
 
     test_data = {
         "means2d": torch.randn(C, N, 2, device=device) * width,
-        "radii": torch.randint(0, width, (C, N, 2), device=device, dtype=torch.int32),
+        "radii": torch.randint(
+            0, width, (C, N, 2), device=device, dtype=torch.int32
+        ),
         "depths": torch.rand(C, N, device=device),
     }
     test_data = expand(test_data, batch_dims)
@@ -728,7 +772,9 @@ def test_isect(test_data, batch_dims: Tuple[int, ...]):
     _tiles_per_gauss, _isect_ids, _gauss_ids = _isect_tiles(
         means2d, radii, depths, tile_size, tile_width, tile_height
     )
-    _isect_offsets = _isect_offset_encode(_isect_ids, I, tile_width, tile_height)
+    _isect_offsets = _isect_offset_encode(
+        _isect_ids, I, tile_width, tile_height
+    )
 
     torch.testing.assert_close(tiles_per_gauss, _tiles_per_gauss)
     torch.testing.assert_close(isect_ids, _isect_ids)
@@ -737,15 +783,17 @@ def test_isect(test_data, batch_dims: Tuple[int, ...]):
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="No CUDA device")
-@pytest.mark.skipif(not gsplat.has_3dgut(), reason="3DGUT/Lidar support isn't built in")
+@pytest.mark.skipif(
+    not gsplat.has_3dgut(), reason="3DGUT/Lidar support isn't built in"
+)
 @pytest.mark.parametrize("batch_dims", [(), (2,), (1, 2)])
 @pytest.mark.parametrize("lidar_model", ["pandar128", "at128"])
-def test_isect_lidar(lidar_model, batch_dims: Tuple[int, ...]):
+def test_isect_lidar(lidar_model, batch_dims: tuple[int, ...]):
     from gsplat.cuda._torch_impl_lidar import (
-        _isect_tiles_lidar,
         ANGLE_TO_PIXEL_SCALING_FACTOR,
+        _isect_tiles_lidar,
     )
-    from gsplat.cuda._wrapper import isect_offset_encode, isect_tiles_lidar
+    from gsplat.cuda._wrapper import isect_tiles_lidar
 
     torch.manual_seed(42)
 
@@ -792,11 +840,15 @@ def lidar_param(hfov_span_deg, ray_location, n_dense_tiles_azimuth):
 
     # Scale FOV to be multiple of a "pixel"
     hfov_span_rad = (
-        math.ceil((hfov_span_deg / 180 * math.pi) * ANGLE_TO_PIXEL_SCALING_FACTOR)
+        math.ceil(
+            (hfov_span_deg / 180 * math.pi) * ANGLE_TO_PIXEL_SCALING_FACTOR
+        )
         / ANGLE_TO_PIXEL_SCALING_FACTOR
     )
     vfov_span_rad = (
-        math.ceil((vfov_span_deg / 180 * math.pi) * ANGLE_TO_PIXEL_SCALING_FACTOR)
+        math.ceil(
+            (vfov_span_deg / 180 * math.pi) * ANGLE_TO_PIXEL_SCALING_FACTOR
+        )
         / ANGLE_TO_PIXEL_SCALING_FACTOR
     )
 
@@ -806,11 +858,15 @@ def lidar_param(hfov_span_deg, ray_location, n_dense_tiles_azimuth):
 
     # If the dense tile's size to be a multiple of a pixel...
     if n_dense_tiles_azimuth < 0:
-        n_dense_tiles_azimuth = math.ceil(hfov_span_pix / (-n_dense_tiles_azimuth))
+        n_dense_tiles_azimuth = math.ceil(
+            hfov_span_pix / (-n_dense_tiles_azimuth)
+        )
 
     # clockwise
     row_elevations_rad = torch.tensor(
-        [vfov_span_rad / 2, 0.0, -vfov_span_rad / 2], dtype=torch.float32, device=device
+        [vfov_span_rad / 2, 0.0, -vfov_span_rad / 2],
+        dtype=torch.float32,
+        device=device,
     )
 
     # Keep base columns strictly within <2*pi span to satisfy lidar parameter assertions.
@@ -861,7 +917,7 @@ def lidar_param(hfov_span_deg, ray_location, n_dense_tiles_azimuth):
     elif ray_location == "both":
         rays_rel_az_pix = [0.0, hfov_span_pix - 1.0]
     else:
-        assert False, f"Invalid ray location: {ray_location=}"
+        raise AssertionError(f"Invalid ray location: {ray_location=}")
 
     dense_mask = torch.zeros(
         (cdf_resolution_azimuth, cdf_resolution_elevation),
@@ -869,15 +925,19 @@ def lidar_param(hfov_span_deg, ray_location, n_dense_tiles_azimuth):
         device=device,
     )
     if len(rays_rel_az_pix) > 0:
-        all_az_rad = column_azimuths_rad[None, :] + row_azimuth_offsets_rad[:, None]
+        all_az_rad = (
+            column_azimuths_rad[None, :] + row_azimuth_offsets_rad[:, None]
+        )
         fov_min_rad = all_az_rad.min().item()
         fov_max_rad = all_az_rad.max().item()
 
-        fov_span_az_pix = (fov_max_rad - fov_min_rad) * ANGLE_TO_PIXEL_SCALING_FACTOR
+        fov_span_az_pix = (
+            fov_max_rad - fov_min_rad
+        ) * ANGLE_TO_PIXEL_SCALING_FACTOR
 
         for ray_rel_az_pix in rays_rel_az_pix:
             az_norm = ray_rel_az_pix / fov_span_az_pix
-            az_idx = int(math.floor(az_norm * cdf_resolution_azimuth))
+            az_idx = math.floor(az_norm * cdf_resolution_azimuth)
             az_idx = max(0, min(az_idx, cdf_resolution_azimuth - 1))
 
             # Always use the middle elevation, as only azimuth requires
@@ -914,7 +974,9 @@ def lidar_param(hfov_span_deg, ray_location, n_dense_tiles_azimuth):
     tiles_pack_info = torch.zeros(
         (n_bins_azimuth * n_bins_elevation, 2), dtype=torch.int32, device=device
     )
-    tiles_to_elements_map = torch.zeros((1, 2), dtype=torch.int32, device=device)
+    tiles_to_elements_map = torch.zeros(
+        (1, 2), dtype=torch.int32, device=device
+    )
 
     # Finally create the LidarTiling object
     tiling = LidarTiling(
@@ -933,7 +995,9 @@ def lidar_param(hfov_span_deg, ray_location, n_dense_tiles_azimuth):
         row_azimuth_offsets_rad=row_azimuth_offsets_rad,
         spinning_direction=spinning_direction,
         spinning_frequency_hz=10.0,
-        angles_to_columns_map=torch.zeros((3, 5), dtype=torch.int32, device=device),
+        angles_to_columns_map=torch.zeros(
+            (3, 5), dtype=torch.int32, device=device
+        ),
         tiling=tiling,
     )
 
@@ -969,13 +1033,15 @@ def gaussian_param(lidar_param, gauss_start_pos, gauss_end_pos):
         elif "max_outside" in boundary_name:
             return hfov_end_pix
         else:
-            assert False, f"Invalid boundary: {boundary_name}"
+            raise AssertionError(f"Invalid boundary: {boundary_name}")
 
     gaussian_start_az_pix = get_hfov_angle_az_pix(gauss_start_pos)
     gaussian_end_az_pix = get_hfov_angle_az_pix(gauss_end_pos)
 
     periodic_azimuth = hfov_span_pix >= full_circle_pix
-    behind_sensor = not periodic_azimuth and gaussian_start_az_pix > gaussian_end_az_pix
+    behind_sensor = (
+        not periodic_azimuth and gaussian_start_az_pix > gaussian_end_az_pix
+    )
 
     # Calculate the raw radius (in floating point)
     radius_az_pix = abs(gaussian_end_az_pix - gaussian_start_az_pix) / 2
@@ -1014,9 +1080,9 @@ def gaussian_param(lidar_param, gauss_start_pos, gauss_end_pos):
         def calc_mean_az_pix(exact_edge: float, radius: float) -> float:
             gauss_mean = exact_edge + radius
             # Convert from float64 to float32 (that's what we use in torch)
-            gauss_mean_fp32 = struct.unpack("!f", struct.pack("!f", float(gauss_mean)))[
-                0
-            ]
+            gauss_mean_fp32 = struct.unpack(
+                "!f", struct.pack("!f", float(gauss_mean))
+            )[0]
             # Estimate where the edge would land with the current gaussian mean
             edge_estim = gauss_mean_fp32 - radius
             # Calc the new gaussian mean so that the mean+radius lands exactly on the exact edge
@@ -1324,9 +1390,30 @@ def gaussian_param(lidar_param, gauss_start_pos, gauss_end_pos):
         ),  # A empty, B=tile 0; only ray@min in B -> 1
         # start@max_outside, end_exact@min_inside:
         #   beg=span+1 -> A clamped empty; end exact@0 -> B=[0,0)=empty
-        (120, "max_outside", "min_inside_exact", "min", 21, 0),  # A/B both empty -> 0
-        (120, "max_outside", "min_inside_exact", "max", 21, 0),  # A/B both empty -> 0
-        (120, "max_outside", "min_inside_exact", "both", 21, 0),  # A/B both empty -> 0
+        (
+            120,
+            "max_outside",
+            "min_inside_exact",
+            "min",
+            21,
+            0,
+        ),  # A/B both empty -> 0
+        (
+            120,
+            "max_outside",
+            "min_inside_exact",
+            "max",
+            21,
+            0,
+        ),  # A/B both empty -> 0
+        (
+            120,
+            "max_outside",
+            "min_inside_exact",
+            "both",
+            21,
+            0,
+        ),  # A/B both empty -> 0
         # start_exact@max_inside, end@min_outside:
         #   end outside -> beg=span-1, end=fc-1, no overflow.
         #   A clamped to [span-1,span)=tile 20, B empty.
@@ -1379,12 +1466,54 @@ def gaussian_param(lidar_param, gauss_start_pos, gauss_end_pos):
             1,
         ),  # A=tile 20; only ray@max in A -> 1
         # Both edges outside the FOV -> A/B clamp to empty.
-        (120, "max_outside_exact", "min_outside", "min", 21, 0),  # both outside -> 0
-        (120, "max_outside_exact", "min_outside", "max", 21, 0),  # both outside -> 0
-        (120, "max_outside_exact", "min_outside", "both", 21, 0),  # both outside -> 0
-        (120, "max_outside", "min_outside_exact", "min", 21, 0),  # both outside -> 0
-        (120, "max_outside", "min_outside_exact", "max", 21, 0),  # both outside -> 0
-        (120, "max_outside", "min_outside_exact", "both", 21, 0),  # both outside -> 0
+        (
+            120,
+            "max_outside_exact",
+            "min_outside",
+            "min",
+            21,
+            0,
+        ),  # both outside -> 0
+        (
+            120,
+            "max_outside_exact",
+            "min_outside",
+            "max",
+            21,
+            0,
+        ),  # both outside -> 0
+        (
+            120,
+            "max_outside_exact",
+            "min_outside",
+            "both",
+            21,
+            0,
+        ),  # both outside -> 0
+        (
+            120,
+            "max_outside",
+            "min_outside_exact",
+            "min",
+            21,
+            0,
+        ),  # both outside -> 0
+        (
+            120,
+            "max_outside",
+            "min_outside_exact",
+            "max",
+            21,
+            0,
+        ),  # both outside -> 0
+        (
+            120,
+            "max_outside",
+            "min_outside_exact",
+            "both",
+            21,
+            0,
+        ),  # both outside -> 0
         # 1 non-periodic azimuth
         # 1.1. Gaussian edge on min hfov boundary
         # 1.1.1 ray on min boundary
@@ -1445,7 +1574,14 @@ def gaussian_param(lidar_param, gauss_start_pos, gauss_end_pos):
             21,
             0,
         ),  # A=[0,2)=cell 0; ray@max not in A -> 0
-        (120, "min_outside", "min_inside_exact", "max", 21, 0),  # clamped empty -> 0
+        (
+            120,
+            "min_outside",
+            "min_inside_exact",
+            "max",
+            21,
+            0,
+        ),  # clamped empty -> 0
         # 1.1.3 ray on both boundaries (non-periodic B is empty, only min side matters)
         (
             120,
@@ -1471,7 +1607,14 @@ def gaussian_param(lidar_param, gauss_start_pos, gauss_end_pos):
             21,
             1,
         ),  # A=cell 0; only ray@min hit -> 1
-        (120, "min_outside", "min_inside_exact", "both", 21, 0),  # clamped empty -> 0
+        (
+            120,
+            "min_outside",
+            "min_inside_exact",
+            "both",
+            21,
+            0,
+        ),  # clamped empty -> 0
         # 1.2. Gaussian edge on max hfov boundary
         # 1.2.1 ray on min boundary
         (
@@ -1852,7 +1995,14 @@ def gaussian_param(lidar_param, gauss_start_pos, gauss_end_pos):
             21,
             21,
         ),  # full_cover triggers conservative shortcut -> 21
-        (200, "far_min_outside", "far_max_outside", "both", 21, 21),  # full_cover -> 21
+        (
+            200,
+            "far_min_outside",
+            "far_max_outside",
+            "both",
+            21,
+            21,
+        ),  # full_cover -> 21
         (
             200,
             "far_min_outside",
@@ -1884,9 +2034,9 @@ def test_isect_lidar_corner_cases(
     gaussian_param,
     expected_tiles: int,
 ):
+    from gsplat.cuda._lidar import relative_angle
     from gsplat.cuda._torch_impl_lidar import _isect_tiles_lidar
     from gsplat.cuda._wrapper import isect_tiles_lidar
-    from gsplat.cuda._lidar import relative_angle
 
     # Convenient aliases
     lidar = lidar_param
@@ -1944,7 +2094,9 @@ def test_isect_lidar_corner_cases(
 @pytest.mark.skipif(not gsplat.has_3dgs(), reason="3DGS support isn't built in")
 @pytest.mark.parametrize("channels", [3, 32, 128])
 @pytest.mark.parametrize("batch_dims", [(), (2,), (1, 2)])
-def test_rasterize_to_pixels(test_data, channels: int, batch_dims: Tuple[int, ...]):
+def test_rasterize_to_pixels(
+    test_data, channels: int, batch_dims: tuple[int, ...]
+):
     from gsplat.cuda._torch_impl import _rasterize_to_pixels
     from gsplat.cuda._wrapper import (
         fully_fused_projection,
@@ -1977,10 +2129,12 @@ def test_rasterize_to_pixels(test_data, channels: int, batch_dims: Tuple[int, ..
     colors = test_data["colors"]
     backgrounds = test_data["backgrounds"]
 
-    covars, _ = quat_scale_to_covar_preci(quats, scales, compute_preci=False, triu=True)
+    covars, _ = quat_scale_to_covar_preci(
+        quats, scales, compute_preci=False, triu=True
+    )
 
     # Project Gaussians to 2D
-    radii, means2d, depths, conics, compensations = fully_fused_projection(
+    radii, means2d, depths, conics, _compensations = fully_fused_projection(
         means, covars, None, None, viewmats, Ks, width, height
     )
     opacities = torch.broadcast_to(opacities[..., None, :], batch_dims + (C, N))
@@ -1989,11 +2143,13 @@ def test_rasterize_to_pixels(test_data, channels: int, batch_dims: Tuple[int, ..
     tile_size = 16 if channels <= 32 else 4
     tile_width = math.ceil(width / float(tile_size))
     tile_height = math.ceil(height / float(tile_size))
-    tiles_per_gauss, isect_ids, flatten_ids = isect_tiles(
+    _tiles_per_gauss, isect_ids, flatten_ids = isect_tiles(
         means2d, radii, depths, tile_size, tile_width, tile_height
     )
     isect_offsets = isect_offset_encode(isect_ids, I, tile_width, tile_height)
-    isect_offsets = isect_offsets.reshape(batch_dims + (C, tile_height, tile_width))
+    isect_offsets = isect_offsets.reshape(
+        batch_dims + (C, tile_height, tile_width)
+    )
 
     means2d.requires_grad = True
     conics.requires_grad = True
@@ -2033,10 +2189,12 @@ def test_rasterize_to_pixels(test_data, channels: int, batch_dims: Tuple[int, ..
     v_render_colors = torch.randn_like(render_colors)
     v_render_alphas = torch.randn_like(render_alphas)
 
-    v_means2d, v_conics, v_colors, v_opacities, v_backgrounds = torch.autograd.grad(
-        (render_colors * v_render_colors).sum()
-        + (render_alphas * v_render_alphas).sum(),
-        (means2d, conics, colors, opacities, backgrounds),
+    v_means2d, v_conics, v_colors, v_opacities, v_backgrounds = (
+        torch.autograd.grad(
+            (render_colors * v_render_colors).sum()
+            + (render_alphas * v_render_alphas).sum(),
+            (means2d, conics, colors, opacities, backgrounds),
+        )
     )
     (
         _v_means2d,
@@ -2053,7 +2211,9 @@ def test_rasterize_to_pixels(test_data, channels: int, batch_dims: Tuple[int, ..
     torch.testing.assert_close(v_conics, _v_conics, rtol=1e-3, atol=1e-3)
     torch.testing.assert_close(v_colors, _v_colors, rtol=1e-3, atol=1e-3)
     torch.testing.assert_close(v_opacities, _v_opacities, rtol=8e-3, atol=6e-3)
-    torch.testing.assert_close(v_backgrounds, _v_backgrounds, rtol=1e-3, atol=1e-3)
+    torch.testing.assert_close(
+        v_backgrounds, _v_backgrounds, rtol=1e-3, atol=1e-3
+    )
 
 
 def _quat_rotation_y(angle_rad: float, device: torch.device):
@@ -2084,7 +2244,11 @@ def _expected_hit_distance_canonical_ray_distance(
         .squeeze(-1)
         .squeeze(0)
     )
-    grd = torch.matmul(iscl_rot, ray_d.unsqueeze(0).unsqueeze(-1)).squeeze(-1).squeeze(0)
+    grd = (
+        torch.matmul(iscl_rot, ray_d.unsqueeze(0).unsqueeze(-1))
+        .squeeze(-1)
+        .squeeze(0)
+    )
     grd = _safe_normalize(grd)
     hit_t = (grd * (-gro)).sum().item()
     grds = scales.squeeze(0) * grd * hit_t
@@ -2110,7 +2274,9 @@ def _pixel_ray_dir_pinhole(
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="No CUDA device")
-@pytest.mark.skipif(not gsplat.has_3dgut(), reason="3DGUT support isn't built in")
+@pytest.mark.skipif(
+    not gsplat.has_3dgut(), reason="3DGUT support isn't built in"
+)
 @pytest.mark.parametrize(
     "means_list,quats_choice,scales_list,pixel_dx,pixel_dy",
     [
@@ -2179,13 +2345,17 @@ def test_rasterize_to_pixels_hit_distance_principal_axis(
 
     means = torch.tensor(means_list, device=device, dtype=torch.float32)
     if quats_choice == "identity":
-        quats = torch.tensor([[1.0, 0.0, 0.0, 0.0]], device=device, dtype=torch.float32)
+        quats = torch.tensor(
+            [[1.0, 0.0, 0.0, 0.0]], device=device, dtype=torch.float32
+        )
     elif quats_choice == "rotated_y_45":
         quats = _quat_rotation_y(math.pi / 4.0, device)
     else:
         raise ValueError(f"Unknown quats_choice: {quats_choice}")
 
-    scales = torch.tensor([list(scales_list)], device=device, dtype=torch.float32)
+    scales = torch.tensor(
+        [list(scales_list)], device=device, dtype=torch.float32
+    )
     opacities = torch.tensor([1.0], device=device, dtype=torch.float32)
 
     viewmats = torch.eye(4, device=device, dtype=torch.float32).unsqueeze(0)
@@ -2203,7 +2373,7 @@ def test_rasterize_to_pixels_hit_distance_principal_axis(
     )
     tile_width = math.ceil(width / float(tile_size))
     tile_height = math.ceil(height / float(tile_size))
-    tiles_per_gauss, isect_ids, flatten_ids = isect_tiles(
+    _tiles_per_gauss, isect_ids, flatten_ids = isect_tiles(
         means2d, radii, depths, tile_size, tile_width, tile_height
     )
     isect_offsets = isect_offset_encode(isect_ids, I, tile_width, tile_height)
@@ -2235,8 +2405,8 @@ def test_rasterize_to_pixels_hit_distance_principal_axis(
     else:
         px_f = cx_f + pixel_dx
         py_f = cy_f + pixel_dy
-    px_int = int(round(px_f))
-    py_int = int(round(py_f))
+    px_int = round(px_f)
+    py_int = round(py_f)
     px_int = max(0, min(width - 1, px_int))
     py_int = max(0, min(height - 1, py_int))
 
@@ -2271,7 +2441,9 @@ def test_rasterize_to_pixels_hit_distance_principal_axis(
 # Since we have comprehensive camera model tests, we don't need to add
 # a camera model axis to this test. We use perfect pinhole model instead.
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="No CUDA device")
-@pytest.mark.skipif(not gsplat.has_3dgut(), reason="3DGUT support isn't built in")
+@pytest.mark.skipif(
+    not gsplat.has_3dgut(), reason="3DGUT support isn't built in"
+)
 @pytest.mark.parametrize(
     "channels,batch_dims,rs_type,use_hit_distance,use_rays,return_normals",
     [
@@ -2299,14 +2471,23 @@ def test_rasterize_to_pixels_hit_distance_principal_axis(
                 [False],  # return_normals
             ),
             # Dedicated test for return_normals=True with one configuration
-            [(3, (), RollingShutterType.ROLLING_TOP_TO_BOTTOM, True, True, True)],
+            [
+                (
+                    3,
+                    (),
+                    RollingShutterType.ROLLING_TOP_TO_BOTTOM,
+                    True,
+                    True,
+                    True,
+                )
+            ],
         )
     ],
 )
 def test_rasterize_to_pixels_eval3d(
     test_data,
     channels: int,
-    batch_dims: Tuple[int, ...],
+    batch_dims: tuple[int, ...],
     rs_type: RollingShutterType,
     use_hit_distance: bool,
     use_rays: bool,
@@ -2314,12 +2495,11 @@ def test_rasterize_to_pixels_eval3d(
 ):
     from gsplat.cuda._torch_impl_eval3d import _rasterize_to_pixels_eval3d
     from gsplat.cuda._wrapper import (
+        RollingShutterType,
         fully_fused_projection_with_ut,
         isect_offset_encode,
         isect_tiles,
-        quat_scale_to_covar_preci,
         rasterize_to_pixels_eval3d_extra,
-        RollingShutterType,
     )
 
     N = test_data["means"].shape[-2]  # number of Gaussians
@@ -2399,7 +2579,7 @@ def test_rasterize_to_pixels_eval3d(
         rori, rdir, rvalid = camera.image_point_to_world_ray_shutter_pose(
             grid, pose_start, pose_end
         )
-        assert (rvalid == False).sum() == 0
+        assert (not rvalid).sum() == 0
         rays = torch.cat([rori, rdir], -1)
         rays.reshape(*batch_shape, height, width, 6)
     else:
@@ -2417,11 +2597,13 @@ def test_rasterize_to_pixels_eval3d(
     tile_size = 16
     tile_width = math.ceil(width / float(tile_size))
     tile_height = math.ceil(height / float(tile_size))
-    tiles_per_gauss, isect_ids, flatten_ids = isect_tiles(
+    _tiles_per_gauss, isect_ids, flatten_ids = isect_tiles(
         means2d, radii, depths, tile_size, tile_width, tile_height
     )
     isect_offsets = isect_offset_encode(isect_ids, I, tile_width, tile_height)
-    isect_offsets = isect_offsets.reshape(batch_dims + (C, tile_height, tile_width))
+    isect_offsets = isect_offsets.reshape(
+        batch_dims + (C, tile_height, tile_width)
+    )
 
     means.requires_grad = True
     quats.requires_grad = True
@@ -2547,7 +2729,9 @@ def test_rasterize_to_pixels_eval3d(
     ref_has_isect = _render_last_ids >= 0
 
     # 1. count_match: same number of samples accumulated
-    count_match = render_sample_counts == _render_sample_counts  # [batch, C, H, W]
+    count_match = (
+        render_sample_counts == _render_sample_counts
+    )  # [batch, C, H, W]
     # 2. vis_mismatch: One has samples, one doesn't (not visible)
     vis_mismatch = cuda_has_isect ^ ref_has_isect
     # 3. count_mismatch: Both have samples but different counts
@@ -2566,7 +2750,10 @@ def test_rasterize_to_pixels_eval3d(
 
     # Compare alphas for each group
     torch.testing.assert_close(
-        render_alphas * count_match, _render_alphas * count_match, rtol=1e-2, atol=2e-3
+        render_alphas * count_match,
+        _render_alphas * count_match,
+        rtol=1e-2,
+        atol=2e-3,
     )
     torch.testing.assert_close(
         render_alphas * vis_mismatch,
@@ -2587,7 +2774,10 @@ def test_rasterize_to_pixels_eval3d(
     count_mismatch = count_mismatch.expand_as(render_colors)
 
     torch.testing.assert_close(
-        render_colors * count_match, _render_colors * count_match, rtol=3e-3, atol=1e-3
+        render_colors * count_match,
+        _render_colors * count_match,
+        rtol=3e-3,
+        atol=1e-3,
     )
     # Bumped tolerance due to release mode optimizations. In debug mode it's ALPHA_THRESHOLD+1e-5.
     torch.testing.assert_close(
@@ -2616,7 +2806,9 @@ def test_rasterize_to_pixels_eval3d(
         # Greatest absolute difference: 5.447864532470703e-05 at index (2, 11, 16, 2) (up to 1e-05 allowed)
         # Greatest relative difference: 0.00024596037110313773 at index (0, 27, 39, 1) (up to 1.3e-06 allowed)
         # Setting tolerances small enough to ignore these errors.
-        torch.testing.assert_close(render_normals, _render_normals, rtol=3e-4, atol=6e-5)
+        torch.testing.assert_close(
+            render_normals, _render_normals, rtol=3e-4, atol=6e-5
+        )
     else:
         assert render_normals is None, (
             "CUDA render_normals should be None when return_normals=False"
@@ -2629,7 +2821,9 @@ def test_rasterize_to_pixels_eval3d(
 
     v_render_colors = torch.randn_like(render_colors)
     v_render_alphas = torch.randn_like(render_alphas)
-    v_render_normals = torch.randn_like(render_normals) if return_normals else None
+    v_render_normals = (
+        torch.randn_like(render_normals) if return_normals else None
+    )
 
     torch.manual_seed(42)
     perm_idx = torch.randperm(render_colors.shape[0])
@@ -2660,7 +2854,15 @@ def test_rasterize_to_pixels_eval3d(
             v_rays,
         ) = torch.autograd.grad(
             loss_cuda,
-            (means, quats, scales, colors, opacities_broadcast, backgrounds, rays),
+            (
+                means,
+                quats,
+                scales,
+                colors,
+                opacities_broadcast,
+                backgrounds,
+                rays,
+            ),
             retain_graph=True,
         )
 
@@ -2674,7 +2876,15 @@ def test_rasterize_to_pixels_eval3d(
             _v_rays,
         ) = torch.autograd.grad(
             loss_ref,
-            (means, quats, scales, colors, opacities_broadcast, backgrounds, rays),
+            (
+                means,
+                quats,
+                scales,
+                colors,
+                opacities_broadcast,
+                backgrounds,
+                rays,
+            ),
             retain_graph=True,
         )
     else:
@@ -2739,9 +2949,9 @@ def test_rasterize_to_pixels_eval3d(
     colors_mask = visible_mask.expand_as(v_colors) & get_inlier_abserror_mask(
         v_colors, _v_colors, quantile=0.99
     )
-    opacities_mask = visible_mask.expand_as(v_opacities) & get_inlier_abserror_mask(
-        v_opacities, _v_opacities, quantile=0.99
-    )
+    opacities_mask = visible_mask.expand_as(
+        v_opacities
+    ) & get_inlier_abserror_mask(v_opacities, _v_opacities, quantile=0.99)
     backgrounds_mask = get_inlier_abserror_mask(
         v_backgrounds, _v_backgrounds, quantile=0.99
     )
@@ -2755,7 +2965,10 @@ def test_rasterize_to_pixels_eval3d(
 
     # Compare backward gradients, excluding the ones that fall above the quantile threshold.
     torch.testing.assert_close(
-        v_means * means_mask.float(), _v_means * means_mask.float(), rtol=0, atol=4e-2
+        v_means * means_mask.float(),
+        _v_means * means_mask.float(),
+        rtol=0,
+        atol=4e-2,
     )
     torch.testing.assert_close(
         v_scales * scales_mask.float(),
@@ -2796,14 +3009,17 @@ def test_rasterize_to_pixels_eval3d(
         rays_mask = get_inlier_abserror_mask(v_rays, _v_rays, quantile=0.95)
         assert rays_mask.sum() > 0
         torch.testing.assert_close(
-            v_rays * rays_mask.float(), _v_rays * rays_mask.float(), rtol=0, atol=4e-2
+            v_rays * rays_mask.float(),
+            _v_rays * rays_mask.float(),
+            rtol=0,
+            atol=4e-2,
         )
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="No CUDA device")
 @pytest.mark.parametrize("sh_degree", [0, 1, 2, 3, 4])
 @pytest.mark.parametrize("batch_dims", [(), (2,), (1, 2)])
-def test_sh(test_data, sh_degree: int, batch_dims: Tuple[int, ...]):
+def test_sh(test_data, sh_degree: int, batch_dims: tuple[int, ...]):
     from gsplat.cuda._torch_impl import _spherical_harmonics
     from gsplat.cuda._wrapper import spherical_harmonics
 
@@ -2827,10 +3043,16 @@ def test_sh(test_data, sh_degree: int, batch_dims: Tuple[int, ...]):
     v_colors = torch.randn_like(colors)
 
     v_coeffs, v_dirs = torch.autograd.grad(
-        (colors * v_colors).sum(), (coeffs, dirs), retain_graph=True, allow_unused=True
+        (colors * v_colors).sum(),
+        (coeffs, dirs),
+        retain_graph=True,
+        allow_unused=True,
     )
     _v_coeffs, _v_dirs = torch.autograd.grad(
-        (_colors * v_colors).sum(), (coeffs, dirs), retain_graph=True, allow_unused=True
+        (_colors * v_colors).sum(),
+        (coeffs, dirs),
+        retain_graph=True,
+        allow_unused=True,
     )
     torch.testing.assert_close(v_coeffs, _v_coeffs, rtol=1e-4, atol=1e-4)
     if sh_degree > 0:

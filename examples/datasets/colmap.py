@@ -16,7 +16,7 @@
 import json
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, assert_never
 
 import cv2
 import imageio.v2 as imageio
@@ -25,9 +25,9 @@ import torch
 from PIL import Image
 from pycolmap import SceneManager
 from tqdm import tqdm
-from typing_extensions import assert_never
 
 from exif import compute_exposure_from_exif
+
 from .normalize import (
     align_principal_axes,
     similarity_from_cameras,
@@ -36,10 +36,10 @@ from .normalize import (
 )
 
 
-def _get_rel_paths(path_dir: str) -> List[str]:
+def _get_rel_paths(path_dir: str) -> list[str]:
     """Recursively get relative paths of files in a directory."""
     paths = []
-    for dp, dn, fn in os.walk(path_dir):
+    for dp, _dn, fn in os.walk(path_dir):
         for f in fn:
             paths.append(os.path.relpath(os.path.join(dp, f), path_dir))
     return paths
@@ -60,8 +60,8 @@ def _resize_image_folder(image_dir: str, resized_dir: str, factor: int) -> str:
             continue
         image = imageio.imread(image_path)[..., :3]
         resized_size = (
-            int(round(image.shape[1] / factor)),
-            int(round(image.shape[0] / factor)),
+            round(image.shape[1] / factor),
+            round(image.shape[0] / factor),
         )
         resized_image = np.array(
             Image.fromarray(image).resize(resized_size, Image.BICUBIC)
@@ -112,7 +112,9 @@ class Parser:
             im = imdata[k]
             rot = im.R()
             trans = im.tvec.reshape(3, 1)
-            w2c = np.concatenate([np.concatenate([rot, trans], 1), bottom], axis=0)
+            w2c = np.concatenate(
+                [np.concatenate([rot, trans], 1), bottom], axis=0
+            )
             w2c_mats.append(w2c)
 
             # support different camera intrinsics
@@ -141,10 +143,14 @@ class Parser:
                 params = np.array([cam.k1, cam.k2, 0.0, 0.0], dtype=np.float32)
                 camtype = "perspective"
             elif type_ == 4 or type_ == "OPENCV":
-                params = np.array([cam.k1, cam.k2, cam.p1, cam.p2], dtype=np.float32)
+                params = np.array(
+                    [cam.k1, cam.k2, cam.p1, cam.p2], dtype=np.float32
+                )
                 camtype = "perspective"
             elif type_ == 5 or type_ == "OPENCV_FISHEYE":
-                params = np.array([cam.k1, cam.k2, cam.k3, cam.k4], dtype=np.float32)
+                params = np.array(
+                    [cam.k1, cam.k2, cam.k3, cam.k4], dtype=np.float32
+                )
                 camtype = "fisheye"
             assert camtype == "perspective" or camtype == "fisheye", (
                 f"Only perspective and fisheye cameras are supported, got {type_}"
@@ -153,12 +159,16 @@ class Parser:
             params_dict[camera_id] = params
             imsize_dict[camera_id] = (cam.width // factor, cam.height // factor)
             mask_dict[camera_id] = None
-        print(f"[Parser] {len(imdata)} images, taken by {len(set(camera_ids))} cameras.")
+        print(
+            f"[Parser] {len(imdata)} images, taken by {len(set(camera_ids))} cameras."
+        )
 
         if len(imdata) == 0:
             raise ValueError("No images found in COLMAP.")
         if not (type_ == 0 or type_ == 1):
-            print("Warning: COLMAP Camera is not PINHOLE. Images have distortion.")
+            print(
+                "Warning: COLMAP Camera is not PINHOLE. Images have distortion."
+            )
 
         w2c_mats = np.stack(w2c_mats, axis=0)
 
@@ -212,8 +222,10 @@ class Parser:
                 colmap_image_dir, image_dir + "_png", factor=factor
             )
             image_files = sorted(_get_rel_paths(image_dir))
-        colmap_to_image = dict(zip(colmap_files, image_files))
-        image_paths = [os.path.join(image_dir, colmap_to_image[f]) for f in image_names]
+        colmap_to_image = dict(zip(colmap_files, image_files, strict=False))
+        image_paths = [
+            os.path.join(image_dir, colmap_to_image[f]) for f in image_names
+        ]
 
         # 3D points and {image_name -> [point_idx]}
         points = manager.points3D.astype(np.float32)
@@ -273,29 +285,35 @@ class Parser:
         self.points = points  # np.ndarray, (num_points, 3)
         self.points_err = points_err  # np.ndarray, (num_points,)
         self.points_rgb = points_rgb  # np.ndarray, (num_points, 3)
-        self.point_indices = point_indices  # Dict[str, np.ndarray], image_name -> [M,]
+        self.point_indices = (
+            point_indices  # Dict[str, np.ndarray], image_name -> [M,]
+        )
         self.transform = transform  # np.ndarray, (4, 4)
 
         # Create 0-based contiguous camera indices from COLMAP camera_ids.
         # This is useful for camera-based embeddings/modules.
         unique_camera_ids = sorted(set(camera_ids))
-        self.camera_id_to_idx = {cid: idx for idx, cid in enumerate(unique_camera_ids)}
+        self.camera_id_to_idx = {
+            cid: idx for idx, cid in enumerate(unique_camera_ids)
+        }
         self.camera_indices = [self.camera_id_to_idx[cid] for cid in camera_ids]
         self.num_cameras = len(unique_camera_ids)
 
         # Load EXIF exposure data if requested.
         # Always read from original (non-downscaled) images since PNG doesn't support EXIF.
         if load_exposure:
-            exposure_values: List[Optional[float]] = []
+            exposure_values: list[float | None] = []
             for image_name in tqdm(image_names, desc="Loading EXIF exposure"):
                 original_path = Path(colmap_image_dir) / image_name
-                exposure_values.append(compute_exposure_from_exif(original_path))
+                exposure_values.append(
+                    compute_exposure_from_exif(original_path)
+                )
 
             # Compute mean across all valid exposures and subtract
             valid_exposures = [e for e in exposure_values if e is not None]
             if valid_exposures:
                 exposure_mean = sum(valid_exposures) / len(valid_exposures)
-                self.exposure_values: List[Optional[float]] = [
+                self.exposure_values: list[float | None] = [
                     (e - exposure_mean) if e is not None else None
                     for e in exposure_values
                 ]
@@ -305,7 +323,9 @@ class Parser:
                 )
             else:
                 self.exposure_values = [None] * len(exposure_values)
-                print("[Parser] No valid EXIF exposure data found in any image.")
+                print(
+                    "[Parser] No valid EXIF exposure data found in any image."
+                )
         else:
             self.exposure_values = [None] * len(image_paths)
 
@@ -314,23 +334,31 @@ class Parser:
         actual_image = imageio.imread(self.image_paths[0])[..., :3]
         actual_height, actual_width = actual_image.shape[:2]
         colmap_width, colmap_height = self.imsize_dict[self.camera_ids[0]]
-        s_height, s_width = actual_height / colmap_height, actual_width / colmap_width
+        s_height, s_width = (
+            actual_height / colmap_height,
+            actual_width / colmap_width,
+        )
         for camera_id, K in self.Ks_dict.items():
             K[0, :] *= s_width
             K[1, :] *= s_height
             self.Ks_dict[camera_id] = K
             width, height = self.imsize_dict[camera_id]
-            self.imsize_dict[camera_id] = (int(width * s_width), int(height * s_height))
+            self.imsize_dict[camera_id] = (
+                int(width * s_width),
+                int(height * s_height),
+            )
 
         # undistortion
         self.mapx_dict = dict()
         self.mapy_dict = dict()
         self.roi_undist_dict = dict()
-        for camera_id in self.params_dict.keys():
+        for camera_id in self.params_dict:
             params = self.params_dict[camera_id]
             if len(params) == 0:
                 continue  # no distortion
-            assert camera_id in self.Ks_dict, f"Missing K for camera {camera_id}"
+            assert camera_id in self.Ks_dict, (
+                f"Missing K for camera {camera_id}"
+            )
             assert camera_id in self.params_dict, (
                 f"Missing params for camera {camera_id}"
             )
@@ -405,7 +433,7 @@ class Dataset:
         self,
         parser: Parser,
         split: str = "train",
-        patch_size: Optional[int] = None,
+        patch_size: int | None = None,
         load_depths: bool = False,
     ):
         self.parser = parser
@@ -421,7 +449,7 @@ class Dataset:
     def __len__(self):
         return len(self.indices)
 
-    def __getitem__(self, item: int) -> Dict[str, Any]:
+    def __getitem__(self, item: int) -> dict[str, Any]:
         index = self.indices[item]
         image = imageio.imread(self.parser.image_paths[index])[..., :3]
         camera_id = self.parser.camera_ids[index]
@@ -472,7 +500,9 @@ class Dataset:
             image_name = self.parser.image_names[index]
             point_indices = self.parser.point_indices[image_name]
             points_world = self.parser.points[point_indices]
-            points_cam = (worldtocams[:3, :3] @ points_world.T + worldtocams[:3, 3:4]).T
+            points_cam = (
+                worldtocams[:3, :3] @ points_world.T + worldtocams[:3, 3:4]
+            ).T
             points_proj = (K @ points_cam.T).T
             points = points_proj[:, :2] / points_proj[:, 2:3]  # (M, 2)
             depths = points_cam[:, 2]  # (M,)

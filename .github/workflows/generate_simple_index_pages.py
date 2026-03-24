@@ -13,11 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import requests
-import os
 import argparse
-from jinja2 import Template
+import os
 import re
+
+import requests
+from jinja2 import Template
 
 # Automatically get the repository name in the format "owner/repo" from the GitHub workflow environment
 GITHUB_REPO = os.getenv("GITHUB_REPOSITORY")
@@ -112,7 +113,7 @@ def generate_simple_index_htmls(wheels, outdir):
 
     # Render the HTML the list the package names
     html_content = template_packages.render(
-        package_names=[str(k) for k in packages.keys()]
+        package_names=[str(k) for k in packages]
     )
     os.makedirs(outdir, exist_ok=True)
     with open(os.path.join(outdir, "index.html"), "w") as file:
@@ -120,9 +121,13 @@ def generate_simple_index_htmls(wheels, outdir):
 
     # for each package, render the HTML to list the wheels
     for package_name, wheels in packages.items():
-        html_page = template_versions.render(repo_name=GITHUB_REPO, wheels=wheels)
+        html_page = template_versions.render(
+            repo_name=GITHUB_REPO, wheels=wheels
+        )
         os.makedirs(os.path.join(outdir, package_name), exist_ok=True)
-        with open(os.path.join(outdir, package_name, "index.html"), "w") as file:
+        with open(
+            os.path.join(outdir, package_name, "index.html"), "w"
+        ) as file:
             file.write(html_page)
 
 
@@ -144,7 +149,10 @@ def generate_all_pages():
     wheels_per_local_version = {}
     for wheel in wheels:
         local_version = wheel["local_version"]
-        if local_version is not None and local_version not in wheels_per_local_version:
+        if (
+            local_version is not None
+            and local_version not in wheels_per_local_version
+        ):
             wheels_per_local_version[local_version] = []
         wheels_per_local_version[local_version].append(wheel)
 
@@ -157,7 +165,9 @@ def generate_all_pages():
 
 
 if __name__ == "__main__":
-    argparser = argparse.ArgumentParser(description="Generate Python Wheels Index Pages")
+    argparser = argparse.ArgumentParser(
+        description="Generate Python Wheels Index Pages"
+    )
     argparser.add_argument(
         "--outdir", help="Output directory for the index pages", default="."
     )

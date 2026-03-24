@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Utility functions for Gaussian splatting."""
+
 import math
 import struct
 import warnings
@@ -23,7 +25,10 @@ import torch.nn.functional as F
 from torch import Tensor
 
 
-def save_ply(splats: torch.nn.ParameterDict, dir: str, colors: torch.Tensor = None):
+def save_ply(
+    splats: torch.nn.ParameterDict, dir: str, colors: torch.Tensor | None = None
+):
+    """Save Gaussian splats to a PLY file (deprecated, use export_splats instead)."""
     warnings.warn(
         "save_ply() is deprecated and may be removed in a future release. "
         "Please use the new export_splats() function instead.",
@@ -149,17 +154,19 @@ def normalized_quat_to_rotmat(quat: Tensor) -> Tensor:
 
 
 def log_transform(x):
+    """Apply signed log1p transform: sign(x) * log(1 + |x|)."""
     return torch.sign(x) * torch.log1p(torch.abs(x))
 
 
 def inverse_log_transform(y):
+    """Apply inverse signed log1p transform: sign(y) * expm1(|y|)."""
     return torch.sign(y) * (torch.expm1(torch.abs(y)))
 
 
 def depth_to_points(
     depths: Tensor, camtoworlds: Tensor, Ks: Tensor, z_depth: bool = True
 ) -> Tensor:
-    """Convert depth maps to 3D points
+    """Convert depth maps to 3D points.
 
     Args:
         depths: Depth maps [..., H, W, 1]
@@ -223,7 +230,7 @@ def depth_to_points(
 def depth_to_normal(
     depths: Tensor, camtoworlds: Tensor, Ks: Tensor, z_depth: bool = True
 ) -> Tensor:
-    """Convert depth maps to surface normals
+    """Convert depth maps to surface normals.
 
     Args:
         depths: Depth maps [..., H, W, 1]
@@ -234,22 +241,26 @@ def depth_to_normal(
     Returns:
         normals: Surface normals in the world coordinate system [..., H, W, 3]
     """
-    points = depth_to_points(depths, camtoworlds, Ks, z_depth=z_depth)  # [..., H, W, 3]
+    points = depth_to_points(
+        depths, camtoworlds, Ks, z_depth=z_depth
+    )  # [..., H, W, 3]
     dx = torch.cat(
         [points[..., 2:, 1:-1, :] - points[..., :-2, 1:-1, :]], dim=-3
     )  # [..., H-2, W-2, 3]
     dy = torch.cat(
         [points[..., 1:-1, 2:, :] - points[..., 1:-1, :-2, :]], dim=-2
     )  # [..., H-2, W-2, 3]
-    normals = F.normalize(torch.cross(dx, dy, dim=-1), dim=-1)  # [..., H-2, W-2, 3]
+    normals = F.normalize(
+        torch.cross(dx, dy, dim=-1), dim=-1
+    )  # [..., H-2, W-2, 3]
     normals = F.pad(normals, (0, 0, 1, 1, 1, 1), value=0.0)  # [..., H, W, 3]
     return normals
 
 
 def get_projection_matrix(znear, zfar, fovX, fovY, device="cuda"):
-    """Create OpenGL-style projection matrix"""
-    tanHalfFovY = math.tan((fovY / 2))
-    tanHalfFovX = math.tan((fovX / 2))
+    """Create OpenGL-style projection matrix."""
+    tanHalfFovY = math.tan(fovY / 2)
+    tanHalfFovX = math.tan(fovX / 2)
 
     top = tanHalfFovY * znear
     bottom = -top

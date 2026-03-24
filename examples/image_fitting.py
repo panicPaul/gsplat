@@ -17,15 +17,14 @@ import math
 import os
 import time
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal
 
 import numpy as np
 import torch
 import tyro
+from gsplat import rasterization, rasterization_2dgs
 from PIL import Image
 from torch import Tensor, optim
-
-from gsplat import rasterization, rasterization_2dgs
 
 
 class SimpleTrainer:
@@ -51,7 +50,9 @@ class SimpleTrainer:
         """Random gaussians"""
         bd = 2
 
-        self.means = bd * (torch.rand(self.num_points, 3, device=self.device) - 0.5)
+        self.means = bd * (
+            torch.rand(self.num_points, 3, device=self.device) - 0.5
+        )
         self.scales = torch.rand(self.num_points, 3, device=self.device)
         d = 3
         self.rgbs = torch.rand(self.num_points, d, device=self.device)
@@ -144,7 +145,9 @@ class SimpleTrainer:
             print(f"Iteration {iter + 1}/{iterations}, Loss: {loss.item()}")
 
             if save_imgs and iter % 5 == 0:
-                frames.append((out_img.detach().cpu().numpy() * 255).astype(np.uint8))
+                frames.append(
+                    (out_img.detach().cpu().numpy() * 255).astype(np.uint8)
+                )
         if save_imgs:
             # save them as a gif with PIL
             frames = [Image.fromarray(frame) for frame in frames]
@@ -158,7 +161,9 @@ class SimpleTrainer:
                 duration=5,
                 loop=0,
             )
-        print(f"Total(s):\nRasterization: {times[0]:.3f}, Backward: {times[1]:.3f}")
+        print(
+            f"Total(s):\nRasterization: {times[0]:.3f}, Backward: {times[1]:.3f}"
+        )
         print(
             f"Per step(s):\nRasterization: {times[0] / iterations:.5f}, Backward: {times[1] / iterations:.5f}"
         )
@@ -178,7 +183,7 @@ def main(
     width: int = 256,
     num_points: int = 100000,
     save_imgs: bool = True,
-    img_path: Optional[Path] = None,
+    img_path: Path | None = None,
     iterations: int = 1000,
     lr: float = 0.01,
     model_type: Literal["3dgs", "2dgs"] = "3dgs",

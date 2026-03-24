@@ -17,7 +17,6 @@ import argparse
 import math
 import os
 import time
-from typing import Tuple
 
 import imageio
 import nerfview
@@ -26,7 +25,6 @@ import torch
 import torch.nn.functional as F
 import tqdm
 import viser
-
 from gsplat._helper import load_test_data
 from gsplat.distributed import cli
 from gsplat.rendering import rasterization
@@ -67,11 +65,18 @@ def main(local_rank: int, world_rank, world_size: int, args):
         sh_degree = None
         C = len(viewmats)
         N = len(means)
-        print("rank", world_rank, "Number of Gaussians:", N, "Number of Cameras:", C)
+        print(
+            "rank",
+            world_rank,
+            "Number of Gaussians:",
+            N,
+            "Number of Cameras:",
+            C,
+        )
 
         # batched render
         for _ in tqdm.trange(1):
-            render_colors, render_alphas, meta = rasterization(
+            render_colors, render_alphas, _meta = rasterization(
                 means,  # [N, 3]
                 quats,  # [N, 4]
                 scales,  # [N, 3]
@@ -100,8 +105,12 @@ def main(local_rank: int, world_rank, world_size: int, args):
             torch.cat(
                 [
                     render_rgbs.reshape(C * height, width, 3),
-                    render_depths.reshape(C * height, width, 1).expand(-1, -1, 3),
-                    render_alphas.reshape(C * height, width, 1).expand(-1, -1, 3),
+                    render_depths.reshape(C * height, width, 1).expand(
+                        -1, -1, 3
+                    ),
+                    render_alphas.reshape(C * height, width, 1).expand(
+                        -1, -1, 3
+                    ),
                 ],
                 dim=1,
             )
@@ -116,9 +125,9 @@ def main(local_rank: int, world_rank, world_size: int, args):
     else:
         means, quats, scales, opacities, sh0, shN = [], [], [], [], [], []
         for ckpt_path in args.ckpt:
-            ckpt = torch.load(ckpt_path, map_location=device, weights_only=True)[
-                "splats"
-            ]
+            ckpt = torch.load(
+                ckpt_path, map_location=device, weights_only=True
+            )["splats"]
             means.append(ckpt["means"])
             quats.append(F.normalize(ckpt["quats"], p=2, dim=-1))
             scales.append(torch.exp(ckpt["scales"]))
@@ -137,7 +146,9 @@ def main(local_rank: int, world_rank, world_size: int, args):
 
     # register and open viewer
     @torch.no_grad()
-    def viewer_render_fn(camera_state: nerfview.CameraState, img_wh: Tuple[int, int]):
+    def viewer_render_fn(
+        camera_state: nerfview.CameraState, img_wh: tuple[int, int]
+    ):
         width, height = img_wh
         c2w = camera_state.c2w
         K = camera_state.get_K(img_wh)
@@ -193,7 +204,7 @@ def main(local_rank: int, world_rank, world_size: int, args):
             tangential_coeffs = None
             thin_prism_coeffs = None
 
-        render_colors, render_alphas, meta = rasterization_fn(
+        render_colors, _render_alphas, _ = rasterization_fn(
             means,  # [N, 3]
             quats,  # [N, 4]
             scales,  # [N, 3]
@@ -275,10 +286,16 @@ if __name__ == "__main__":
     """
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--output_dir", type=str, default="results/", help="where to dump outputs"
+        "--output_dir",
+        type=str,
+        default="results/",
+        help="where to dump outputs",
     )
     parser.add_argument(
-        "--scene_grid", type=int, default=1, help="repeat the scene into a grid of NxN"
+        "--scene_grid",
+        type=int,
+        default=1,
+        help="repeat the scene into a grid of NxN",
     )
     parser.add_argument(
         "--ckpt", type=str, nargs="+", default=None, help="path to the .pt file"
@@ -286,7 +303,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--port", type=int, default=8080, help="port for the viewer server"
     )
-    parser.add_argument("--backend", type=str, default="gsplat", help="gsplat, inria")
+    parser.add_argument(
+        "--backend", type=str, default="gsplat", help="gsplat, inria"
+    )
     args = parser.parse_args()
     assert args.scene_grid % 2 == 1, "scene_grid must be odd"
 

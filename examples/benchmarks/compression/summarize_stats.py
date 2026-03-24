@@ -17,13 +17,12 @@ import json
 import os
 import subprocess
 from collections import defaultdict
-from typing import List
 
 import numpy as np
 import tyro
 
 
-def main(results_dir: str, scenes: List[str], stage: str = "compress"):
+def main(results_dir: str, scenes: list[str], stage: str = "compress"):
     print("scenes:", scenes)
 
     summary = defaultdict(list)
@@ -34,14 +33,18 @@ def main(results_dir: str, scenes: List[str], stage: str = "compress"):
             zip_path = f"{scene_dir}/compression.zip"
             if os.path.exists(zip_path):
                 subprocess.run(f"rm {zip_path}", shell=True)
-            subprocess.run(f"zip -r {zip_path} {scene_dir}/compression/", shell=True)
+            subprocess.run(
+                f"zip -r {zip_path} {scene_dir}/compression/", shell=True
+            )
             out = subprocess.run(
                 f"stat -c%s {zip_path}", shell=True, capture_output=True
             )
             size = int(out.stdout)
             summary["size"].append(size)
 
-        with open(os.path.join(scene_dir, f"stats/{stage}_step29999.json"), "r") as f:
+        with open(
+            os.path.join(scene_dir, f"stats/{stage}_step29999.json")
+        ) as f:
             stats = json.load(f)
             for k, v in stats.items():
                 summary[k].append(v)

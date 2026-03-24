@@ -16,17 +16,16 @@
 import argparse
 import math
 import time
+from pathlib import Path
 
-import numpy as np
 import torch
 import torch.nn.functional as F
 import viser
-from pathlib import Path
 from gsplat.distributed import cli
 from gsplat.rendering import rasterization_2dgs
-
 from nerfview import CameraState, RenderTabState, apply_float_colormap
-from gsplat_viewer_2dgs import GsplatViewer, GsplatRenderTabState
+
+from gsplat_viewer_2dgs import GsplatRenderTabState, GsplatViewer
 
 
 def main(local_rank: int, world_rank, world_size: int, args):
@@ -54,7 +53,9 @@ def main(local_rank: int, world_rank, world_size: int, args):
 
     # register and open viewer
     @torch.no_grad()
-    def viewer_render_fn(camera_state: CameraState, render_tab_state: RenderTabState):
+    def viewer_render_fn(
+        camera_state: CameraState, render_tab_state: RenderTabState
+    ):
         assert isinstance(render_tab_state, GsplatRenderTabState)
         if render_tab_state.preview_render:
             width = render_tab_state.render_width
@@ -72,8 +73,8 @@ def main(local_rank: int, world_rank, world_size: int, args):
             render_colors,
             render_alphas,
             render_normals,
-            normals_from_depth,
-            render_distort,
+            _normals_from_depth,
+            _render_distort,
             render_median,
             info,
         ) = rasterization_2dgs(
@@ -96,11 +97,15 @@ def main(local_rank: int, world_rank, world_size: int, args):
             radius_clip=render_tab_state.radius_clip,
             eps2d=render_tab_state.eps2d,
             render_mode="RGB+ED",
-            backgrounds=torch.tensor([render_tab_state.backgrounds], device=device)
+            backgrounds=torch.tensor(
+                [render_tab_state.backgrounds], device=device
+            )
             / 255.0,
         )
         render_tab_state.total_gs_count = len(means)
-        render_tab_state.rendered_gs_count = (info["radii"] > 0).all(-1).sum().item()
+        render_tab_state.rendered_gs_count = (
+            (info["radii"] > 0).all(-1).sum().item()
+        )
 
         if render_tab_state.render_mode == "depth":
             # normalize depth to [0, 1]
@@ -116,7 +121,9 @@ def main(local_rank: int, world_rank, world_size: int, args):
             if render_tab_state.inverse:
                 depth_norm = 1 - depth_norm
             renders = (
-                apply_float_colormap(depth_norm, render_tab_state.colormap).cpu().numpy()
+                apply_float_colormap(depth_norm, render_tab_state.colormap)
+                .cpu()
+                .numpy()
             )
         elif render_tab_state.render_mode == "normal":
             render_normals = render_normals * 0.5 + 0.5  # normalize to [0, 1]
@@ -124,7 +131,9 @@ def main(local_rank: int, world_rank, world_size: int, args):
         elif render_tab_state.render_mode == "alpha":
             alpha = render_alphas[0, ..., 0:1]
             renders = (
-                apply_float_colormap(alpha, render_tab_state.colormap).cpu().numpy()
+                apply_float_colormap(alpha, render_tab_state.colormap)
+                .cpu()
+                .numpy()
             )
         else:
             render_colors = render_colors[0, ..., 0:3].clamp(0, 1)
@@ -156,10 +165,16 @@ if __name__ == "__main__":
     """
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--output_dir", type=str, default="results/", help="where to dump outputs"
+        "--output_dir",
+        type=str,
+        default="results/",
+        help="where to dump outputs",
     )
     parser.add_argument(
-        "--scene_grid", type=int, default=1, help="repeat the scene into a grid of NxN"
+        "--scene_grid",
+        type=int,
+        default=1,
+        help="repeat the scene into a grid of NxN",
     )
     parser.add_argument(
         "--ckpt", type=str, nargs="+", default=None, help="path to the .pt file"

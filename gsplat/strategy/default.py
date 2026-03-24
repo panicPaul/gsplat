@@ -13,11 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Default densification and pruning strategy following the original 3DGS paper."""
+
 from dataclasses import dataclass
-from typing import Any, Dict, Tuple, Union
+from typing import Any, Literal
 
 import torch
-from typing_extensions import Literal
 
 from .base import Strategy
 from .ops import duplicate, remove, reset_opa, split
@@ -25,9 +26,9 @@ from .ops import duplicate, remove, reset_opa, split
 
 @dataclass
 class DefaultStrategy(Strategy):
-    """A default strategy that follows the original 3DGS paper:
+    """A default strategy that follows the original 3DGS paper.
 
-    `3D Gaussian Splatting for Real-Time Radiance Field Rendering <https://arxiv.org/abs/2308.04079>`_
+    See `3D Gaussian Splatting for Real-Time Radiance Field Rendering <https://arxiv.org/abs/2308.04079>`_.
 
     The strategy will:
 
@@ -75,7 +76,6 @@ class DefaultStrategy(Strategy):
           in variable "gradient_2dgs".
 
     Examples:
-
         >>> from gsplat import DefaultStrategy, rasterization
         >>> params: Dict[str, torch.nn.Parameter] | torch.nn.ParameterDict = ...
         >>> optimizers: Dict[str, torch.optim.Optimizer] = ...
@@ -108,7 +108,7 @@ class DefaultStrategy(Strategy):
     verbose: bool = False
     key_for_gradient: Literal["means2d", "gradient_2dgs"] = "means2d"
 
-    def initialize_state(self, scene_scale: float = 1.0) -> Dict[str, Any]:
+    def initialize_state(self, scene_scale: float = 1.0) -> dict[str, Any]:
         """Initialize and return the running state for this strategy.
 
         The returned state should be passed to the `step_pre_backward()` and
@@ -126,8 +126,8 @@ class DefaultStrategy(Strategy):
 
     def check_sanity(
         self,
-        params: Union[Dict[str, torch.nn.Parameter], torch.nn.ParameterDict],
-        optimizers: Dict[str, torch.optim.Optimizer],
+        params: dict[str, torch.nn.Parameter] | torch.nn.ParameterDict,
+        optimizers: dict[str, torch.optim.Optimizer],
     ):
         """Sanity check for the parameters and optimizers.
 
@@ -144,7 +144,6 @@ class DefaultStrategy(Strategy):
             after initializing the strategy to ensure the convention of the parameters
             and optimizers is as expected.
         """
-
         super().check_sanity(params, optimizers)
         # The following keys are required for this strategy.
         for key in ["means", "scales", "quats", "opacities"]:
@@ -152,11 +151,11 @@ class DefaultStrategy(Strategy):
 
     def step_pre_backward(
         self,
-        params: Union[Dict[str, torch.nn.Parameter], torch.nn.ParameterDict],
-        optimizers: Dict[str, torch.optim.Optimizer],
-        state: Dict[str, Any],
+        params: dict[str, torch.nn.Parameter] | torch.nn.ParameterDict,
+        optimizers: dict[str, torch.optim.Optimizer],
+        state: dict[str, Any],
         step: int,
-        info: Dict[str, Any],
+        info: dict[str, Any],
     ):
         """Callback function to be executed before the `loss.backward()` call."""
         assert self.key_for_gradient in info, (
@@ -166,11 +165,11 @@ class DefaultStrategy(Strategy):
 
     def step_post_backward(
         self,
-        params: Union[Dict[str, torch.nn.Parameter], torch.nn.ParameterDict],
-        optimizers: Dict[str, torch.optim.Optimizer],
-        state: Dict[str, Any],
+        params: dict[str, torch.nn.Parameter] | torch.nn.ParameterDict,
+        optimizers: dict[str, torch.optim.Optimizer],
+        state: dict[str, Any],
         step: int,
-        info: Dict[str, Any],
+        info: dict[str, Any],
         packed: bool = False,
     ):
         """Callback function to be executed after the `loss.backward()` call."""
@@ -217,9 +216,9 @@ class DefaultStrategy(Strategy):
 
     def _update_state(
         self,
-        params: Union[Dict[str, torch.nn.Parameter], torch.nn.ParameterDict],
-        state: Dict[str, Any],
-        info: Dict[str, Any],
+        params: dict[str, torch.nn.Parameter] | torch.nn.ParameterDict,
+        state: dict[str, Any],
+        info: dict[str, Any],
         packed: bool = False,
     ):
         for key in [
@@ -277,11 +276,11 @@ class DefaultStrategy(Strategy):
     @torch.no_grad()
     def _grow_gs(
         self,
-        params: Union[Dict[str, torch.nn.Parameter], torch.nn.ParameterDict],
-        optimizers: Dict[str, torch.optim.Optimizer],
-        state: Dict[str, Any],
+        params: dict[str, torch.nn.Parameter] | torch.nn.ParameterDict,
+        optimizers: dict[str, torch.optim.Optimizer],
+        state: dict[str, Any],
         step: int,
-    ) -> Tuple[int, int]:
+    ) -> tuple[int, int]:
         count = state["count"]
         grads = state["grad2d"] / count.clamp_min(1)
         device = grads.device
@@ -302,7 +301,9 @@ class DefaultStrategy(Strategy):
 
         # first duplicate
         if n_dupli > 0:
-            duplicate(params=params, optimizers=optimizers, state=state, mask=is_dupli)
+            duplicate(
+                params=params, optimizers=optimizers, state=state, mask=is_dupli
+            )
 
         # new GSs added by duplication will not be split
         is_split = torch.cat(
@@ -326,9 +327,9 @@ class DefaultStrategy(Strategy):
     @torch.no_grad()
     def _prune_gs(
         self,
-        params: Union[Dict[str, torch.nn.Parameter], torch.nn.ParameterDict],
-        optimizers: Dict[str, torch.optim.Optimizer],
-        state: Dict[str, Any],
+        params: dict[str, torch.nn.Parameter] | torch.nn.ParameterDict,
+        optimizers: dict[str, torch.optim.Optimizer],
+        state: dict[str, Any],
         step: int,
     ) -> int:
         is_prune = torch.sigmoid(params["opacities"].flatten()) < self.prune_opa
@@ -349,6 +350,8 @@ class DefaultStrategy(Strategy):
 
         n_prune = is_prune.sum().item()
         if n_prune > 0:
-            remove(params=params, optimizers=optimizers, state=state, mask=is_prune)
+            remove(
+                params=params, optimizers=optimizers, state=state, mask=is_prune
+            )
 
         return n_prune

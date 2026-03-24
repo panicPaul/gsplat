@@ -13,17 +13,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Profiling utilities for timing gsplat operations."""
+
 import os
 import time
+from collections.abc import Callable
 from functools import wraps
-from typing import Callable, Optional
 
 import torch
 
 profiler = {}
 
 
-class timeit(object):
+class timeit:
     """Profiler that is controled by the TIMEIT environment variable.
 
     If TIMEIT is set to 1, the profiler will measure the time taken by the decorated function.
@@ -45,16 +47,19 @@ class timeit(object):
     """
 
     def __init__(self, name: str = "unnamed"):
+        """Initialize the profiler with the given name."""
         self.name = name
-        self.start_time: Optional[float] = None
+        self.start_time: float | None = None
         self.enabled = os.environ.get("TIMEIT", "0") == "1"
 
     def __enter__(self):
+        """Start timing."""
         if self.enabled:
             torch.cuda.synchronize()
             self.start_time = time.perf_counter()
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        """Stop timing and record elapsed time."""
         if self.enabled:
             torch.cuda.synchronize()
             end_time = time.perf_counter()
@@ -65,6 +70,8 @@ class timeit(object):
                 profiler[self.name] += total_time
 
     def __call__(self, f: Callable) -> Callable:
+        """Use as a decorator to time function calls."""
+
         @wraps(f)
         def decorated(*args, **kwargs):
             with self:

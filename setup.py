@@ -39,14 +39,14 @@ def get_ext():
 
 
 def get_extensions():
-    from torch.utils.cpp_extension import CUDAExtension
-
     # Use the same build parameters as the JIT build. However, directly
     # importing the gsplat.cuda.build module would trigger a circular
     # dependency where gsplat is imported before it is built. To avoid
     # this, we sidestep the traditional Python import mechanism and construct
     # the module directly from build.py.
     import importlib.util
+
+    from torch.utils.cpp_extension import CUDAExtension
 
     spec = importlib.util.spec_from_file_location(
         "gsplat_cuda_build", os.path.join("gsplat", "cuda", "build.py")

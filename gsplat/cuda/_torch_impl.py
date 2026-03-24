@@ -14,18 +14,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import struct
-from typing import Optional, Tuple
-
 import math
+import struct
+from typing import assert_never
+
 import torch
 import torch.nn.functional as F
 from torch import Tensor
-from typing_extensions import assert_never
-
-from ._wrapper import CameraModel
 
 from ._constants import MAX_ALPHA
+from ._wrapper import CameraModel
 
 
 def _persp_proj(
@@ -34,7 +32,7 @@ def _persp_proj(
     Ks: Tensor,  # [..., C, 3, 3]
     width: int,
     height: int,
-) -> Tuple[Tensor, Tensor]:
+) -> tuple[Tensor, Tensor]:
     """PyTorch implementation of perspective projection for 3D Gaussians.
 
     Args:
@@ -78,7 +76,9 @@ def _persp_proj(
         [fx / tz, O, -fx * tx / tz2, O, fy / tz, -fy * ty / tz2], dim=-1
     ).reshape(batch_dims + (C, N, 2, 3))
 
-    cov2d = torch.einsum("...ij,...jk,...kl->...il", J, covars, J.transpose(-1, -2))
+    cov2d = torch.einsum(
+        "...ij,...jk,...kl->...il", J, covars, J.transpose(-1, -2)
+    )
     means2d = torch.einsum(
         "...ij,...nj->...ni", Ks[..., :2, :3], means
     )  # [..., C, N, 2]
@@ -92,7 +92,7 @@ def _fisheye_proj(
     Ks: Tensor,  # [..., C, 3, 3]
     width: int,
     height: int,
-) -> Tuple[Tensor, Tensor]:
+) -> tuple[Tensor, Tensor]:
     """PyTorch implementation of fisheye projection for 3D Gaussians.
 
     Args:
@@ -151,7 +151,9 @@ def _fisheye_proj(
         dim=-1,
     ).reshape(batch_dims + (C, N, 2, 3))
 
-    cov2d = torch.einsum("...ij,...jk,...kl->...il", J, covars, J.transpose(-1, -2))
+    cov2d = torch.einsum(
+        "...ij,...jk,...kl->...il", J, covars, J.transpose(-1, -2)
+    )
     return means2d, cov2d  # [..., C, N, 2], [..., C, N, 2, 2]
 
 
@@ -161,7 +163,7 @@ def _ortho_proj(
     Ks: Tensor,  # [..., C, 3, 3]
     width: int,
     height: int,
-) -> Tuple[Tensor, Tensor]:
+) -> tuple[Tensor, Tensor]:
     """PyTorch implementation of orthographic projection for 3D Gaussians.
 
     Args:
@@ -193,9 +195,12 @@ def _ortho_proj(
         .repeat([1] * len(batch_dims) + [1, N, 1, 1])
     )
 
-    cov2d = torch.einsum("...ij,...jk,...kl->...il", J, covars, J.transpose(-1, -2))
+    cov2d = torch.einsum(
+        "...ij,...jk,...kl->...il", J, covars, J.transpose(-1, -2)
+    )
     means2d = (
-        means[..., :2] * Ks[..., None, [0, 1], [0, 1]] + Ks[..., None, [0, 1], [2, 2]]
+        means[..., :2] * Ks[..., None, [0, 1], [0, 1]]
+        + Ks[..., None, [0, 1], [2, 2]]
     )  # [..., C, N, 2]
     return means2d, cov2d  # [..., C, N, 2], [..., C, N, 2, 2]
 
@@ -204,7 +209,7 @@ def _world_to_cam(
     means: Tensor,  # [..., N, 3]
     covars: Tensor,  # [..., N, 3, 3]
     viewmats: Tensor,  # [..., C, 4, 4]
-) -> Tuple[Tensor, Tensor]:
+) -> tuple[Tensor, Tensor]:
     """PyTorch implementation of world to camera transformation on Gaussians.
 
     Args:
@@ -248,8 +253,8 @@ def _fully_fused_projection(
     far_plane: float = 1e10,
     calc_compensations: bool = False,
     camera_model: CameraModel = "pinhole",
-) -> Tuple[Tensor, Tensor, Tensor, Tensor, Optional[Tensor]]:
-    """PyTorch implementation of `gsplat.cuda._wrapper.fully_fused_projection()`
+) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor | None]:
+    """PyTorch implementation of :func:`gsplat.cuda._wrapper.fully_fused_projection`.
 
     .. note::
 
@@ -283,7 +288,9 @@ def _fully_fused_projection(
         covars2d[..., 0, 0] * covars2d[..., 1, 1]
         - covars2d[..., 0, 1] * covars2d[..., 1, 0]
     )
-    covars2d = covars2d + torch.eye(2, device=means.device, dtype=means.dtype) * eps2d
+    covars2d = (
+        covars2d + torch.eye(2, device=means.device, dtype=means.dtype) * eps2d
+    )
 
     det = (
         covars2d[..., 0, 0] * covars2d[..., 1, 1]
@@ -336,7 +343,7 @@ def _isect_tiles(
     tile_width: int,
     tile_height: int,
     sort: bool = True,
-) -> Tuple[Tensor, Tensor, Tensor]:
+) -> tuple[Tensor, Tensor, Tensor]:
     """Pytorch implementation of `gsplat.cuda._wrapper.isect_tiles()`.
 
     .. note::
@@ -381,10 +388,13 @@ def _isect_tiles(
     assert image_n_bits + tile_n_bits + 32 <= 64
 
     def binary(num):
-        return "".join("{:0>8b}".format(c) for c in struct.pack("!f", num))
+        return "".join(f"{c:0>8b}" for c in struct.pack("!f", num))
 
     def kernel(image_id, gauss_id):
-        if radii[image_id, gauss_id, 0] <= 0.0 or radii[image_id, gauss_id, 1] <= 0.0:
+        if (
+            radii[image_id, gauss_id, 0] <= 0.0
+            or radii[image_id, gauss_id, 1] <= 0.0
+        ):
             return
         index = image_id * N + gauss_id
         curr_idx = cum_tiles_per_gauss[index - 1] if index > 0 else 0
@@ -442,7 +452,9 @@ def _isect_offset_encode(
         (I, tile_height, tile_width), dtype=torch.int64, device=isect_ids.device
     )
 
-    isect_ids_uq, counts = torch.unique_consecutive(isect_ids >> 32, return_counts=True)
+    isect_ids_uq, counts = torch.unique_consecutive(
+        isect_ids >> 32, return_counts=True
+    )
 
     image_ids_uq = isect_ids_uq >> tile_n_bits
     tile_ids_uq = isect_ids_uq & ((1 << tile_n_bits) - 1)
@@ -451,7 +463,9 @@ def _isect_offset_encode(
 
     tile_counts[image_ids_uq, tile_ids_y_uq, tile_ids_x_uq] = counts
 
-    cum_tile_counts = torch.cumsum(tile_counts.flatten(), dim=0).reshape_as(tile_counts)
+    cum_tile_counts = torch.cumsum(tile_counts.flatten(), dim=0).reshape_as(
+        tile_counts
+    )
     offsets = cum_tile_counts - tile_counts
     return offsets.int()
 
@@ -466,7 +480,7 @@ def accumulate(
     image_ids: Tensor,  # [M]
     image_width: int,
     image_height: int,
-) -> Tuple[Tensor, Tensor]:
+) -> tuple[Tensor, Tensor]:
     """Alpha compositing of 2D Gaussians in Pure Pytorch.
 
     This function performs alpha compositing for Gaussians based on the pair of indices
@@ -505,7 +519,6 @@ def accumulate(
         - **renders**: Accumulated colors. [..., image_height, image_width, channels]
         - **alphas**: Accumulated opacities. [..., image_height, image_width, 1]
     """
-
     try:
         from nerfacc import accumulate_along_rays, render_weight_from_alpha
     except ImportError:
@@ -527,7 +540,9 @@ def accumulate(
 
     pixel_ids_x = pixel_ids % image_width
     pixel_ids_y = pixel_ids // image_width
-    pixel_coords = torch.stack([pixel_ids_x, pixel_ids_y], dim=-1) + 0.5  # [M, 2]
+    pixel_coords = (
+        torch.stack([pixel_ids_x, pixel_ids_y], dim=-1) + 0.5
+    )  # [M, 2]
     deltas = pixel_coords - means2d[image_ids, gaussian_ids]  # [M, 2]
     c = conics[image_ids, gaussian_ids]  # [M, 3]
     sigmas = (
@@ -567,9 +582,9 @@ def _rasterize_to_pixels(
     tile_size: int,
     isect_offsets: Tensor,  # [..., tile_height, tile_width]
     flatten_ids: Tensor,  # [n_isects]
-    backgrounds: Optional[Tensor] = None,  # [..., channels]
+    backgrounds: Tensor | None = None,  # [..., channels]
     batch_per_iter: int = 100,
-) -> Tuple[Tensor, Tensor]:
+) -> tuple[Tensor, Tensor]:
     """Pytorch implementation of `gsplat.cuda._wrapper.rasterize_to_pixels()`.
 
     This function rasterizes 2D Gaussians to pixels in a Pytorch-friendly way. It
@@ -671,19 +686,16 @@ def _rasterize_to_pixels(
 
 
 def _eval_sh_bases_fast(basis_dim: int, dirs: Tensor):
-    """
-    Evaluate spherical harmonics bases at unit direction for high orders
-    using approach described by
-    Efficient Spherical Harmonic Evaluation, Peter-Pike Sloan, JCGT 2013
-    https://jcgt.org/published/0002/02/06/
+    """Evaluate spherical harmonics bases at unit direction for high orders.
 
+    Uses approach described by Efficient Spherical Harmonic Evaluation,
+    Peter-Pike Sloan, JCGT 2013. See reference C++ code at
+    https://jcgt.org/published/0002/02/06/code.zip
 
     :param basis_dim: int SH basis dim. Currently, only 1-25 square numbers supported
     :param dirs: torch.Tensor (..., 3) unit directions
 
     :return: torch.Tensor (..., basis_dim)
-
-    See reference C++ code in https://jcgt.org/published/0002/02/06/code.zip
     """
     result = torch.empty(
         (*dirs.shape[:-1], basis_dim), dtype=dirs.dtype, device=dirs.device

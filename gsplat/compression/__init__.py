@@ -13,4 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Compression utilities for Gaussian splats."""
+
 from .png_compression import PngCompression

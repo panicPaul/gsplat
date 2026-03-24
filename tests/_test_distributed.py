@@ -15,7 +15,6 @@
 
 import pytest
 import torch
-
 from gsplat.distributed import (
     all_gather_int32,
     all_gather_tensor_list,
@@ -25,7 +24,9 @@ from gsplat.distributed import (
 )
 
 
-def _main_all_gather_int32(local_rank: int, world_rank: int, world_size: int, _):
+def _main_all_gather_int32(
+    local_rank: int, world_rank: int, world_size: int, _
+):
     device = torch.device("cuda", local_rank)
 
     value = world_rank
@@ -44,7 +45,9 @@ def test_all_gather_int32():
     cli(_main_all_gather_int32, None, verbose=True)
 
 
-def _main_all_to_all_int32(local_rank: int, world_rank: int, world_size: int, _):
+def _main_all_to_all_int32(
+    local_rank: int, world_rank: int, world_size: int, _
+):
     device = torch.device("cuda", local_rank)
 
     values = list(range(world_size))
@@ -55,7 +58,9 @@ def _main_all_to_all_int32(local_rank: int, world_rank: int, world_size: int, _)
     values = torch.arange(world_size, device=device, dtype=torch.int)
     collected = all_to_all_int32(world_size, values, device=device)
     for i in range(world_size):
-        assert collected[i] == torch.tensor(world_rank, device=device, dtype=torch.int)
+        assert collected[i] == torch.tensor(
+            world_rank, device=device, dtype=torch.int
+        )
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="No CUDA device")
@@ -63,7 +68,9 @@ def test_all_to_all_int32():
     cli(_main_all_to_all_int32, None, verbose=True)
 
 
-def _main_all_gather_tensor_list(local_rank: int, world_rank: int, world_size: int, _):
+def _main_all_gather_tensor_list(
+    local_rank: int, world_rank: int, world_size: int, _
+):
     device = torch.device("cuda", local_rank)
     N = 10
 
@@ -73,12 +80,16 @@ def _main_all_gather_tensor_list(local_rank: int, world_rank: int, world_size: i
     ]
 
     target_list = [
-        torch.cat([torch.full((N, 2), i, device=device) for i in range(world_size)]),
-        torch.cat([torch.full((N, 3, 3), i, device=device) for i in range(world_size)]),
+        torch.cat(
+            [torch.full((N, 2), i, device=device) for i in range(world_size)]
+        ),
+        torch.cat(
+            [torch.full((N, 3, 3), i, device=device) for i in range(world_size)]
+        ),
     ]
 
     collected = all_gather_tensor_list(world_size, tensor_list)
-    for tensor, target in zip(collected, target_list):
+    for tensor, target in zip(collected, target_list, strict=False):
         assert torch.equal(tensor, target)
 
 
@@ -87,7 +98,9 @@ def test_all_gather_tensor_list():
     cli(_main_all_gather_tensor_list, None, verbose=True)
 
 
-def _main_all_to_all_tensor_list(local_rank: int, world_rank: int, world_size: int, _):
+def _main_all_to_all_tensor_list(
+    local_rank: int, world_rank: int, world_size: int, _
+):
     device = torch.device("cuda", local_rank)
     splits = torch.arange(0, world_size, device=device)
     N = splits.sum().item()
@@ -113,7 +126,7 @@ def _main_all_to_all_tensor_list(local_rank: int, world_rank: int, world_size: i
     ]
 
     collected = all_to_all_tensor_list(world_size, tensor_list, splits)
-    for tensor, target in zip(collected, target_list):
+    for tensor, target in zip(collected, target_list, strict=False):
         assert torch.equal(tensor, target)
 
 

@@ -16,16 +16,19 @@
 
 import math
 import warnings
+from collections.abc import Callable
 from enum import IntEnum
-from typing import Any, Callable, Optional, Tuple
+from typing import Any, Literal, Optional
 
 import torch
 from torch import Tensor
-from typing_extensions import Literal
+
 from gsplat._helper import assert_shape
 from gsplat.cuda._lidar import (
-    RowOffsetStructuredSpinningLidarModelParametersExt as RowOffsetStructuredSpinningLidarModelParametersExtBase,
     FOV as FOVBase,
+)
+from gsplat.cuda._lidar import (
+    RowOffsetStructuredSpinningLidarModelParametersExt as RowOffsetStructuredSpinningLidarModelParametersExtBase,
 )
 
 ExternalDistortionModelMeta = Literal["bivariate-windshield"]
@@ -110,7 +113,9 @@ class FThetaPolynomialType(IntEnum):
     ANGLE_TO_PIXELDIST = 1
 
 
-UnscentedTransformParameters = _make_lazy_cuda_cls("UnscentedTransformParameters")
+UnscentedTransformParameters = _make_lazy_cuda_cls(
+    "UnscentedTransformParameters"
+)
 FThetaCameraDistortionParameters = _make_lazy_cuda_cls(
     "FThetaCameraDistortionParameters"
 )
@@ -137,7 +142,9 @@ class BivariateWindshieldModelParameters:
     @classmethod
     def _ensure_cuda_cls(cls):
         if cls._cuda_cls is None:
-            cls._cuda_cls = _make_lazy_cuda_cls("BivariateWindshieldModelParameters")
+            cls._cuda_cls = _make_lazy_cuda_cls(
+                "BivariateWindshieldModelParameters"
+            )
             cls.MAX_ORDER = cls._cuda_cls.get_max_order()
             cls.MAX_COEFFS = cls._cuda_cls.get_max_coeffs()
 
@@ -183,16 +190,18 @@ def has_reloc():
 
 def create_camera_model(
     camera_model: str,
-    width: Optional[int] = None,
-    height: Optional[int] = None,
-    principal_points: Optional[Tensor] = None,
-    focal_lengths: Optional[Tensor] = None,
-    radial_coeffs: Optional[Tensor] = None,
-    tangential_coeffs: Optional[Tensor] = None,
-    thin_prism_coeffs: Optional[Tensor] = None,
-    ftheta_coeffs: Optional[FThetaCameraDistortionParameters] = None,
+    width: int | None = None,
+    height: int | None = None,
+    principal_points: Tensor | None = None,
+    focal_lengths: Tensor | None = None,
+    radial_coeffs: Tensor | None = None,
+    tangential_coeffs: Tensor | None = None,
+    thin_prism_coeffs: Tensor | None = None,
+    ftheta_coeffs: FThetaCameraDistortionParameters | None = None,
     rs_type: RollingShutterType = RollingShutterType.GLOBAL,
-    lidar_coeffs: Optional["RowOffsetStructuredSpinningLidarModelParametersExt"] = None,
+    lidar_coeffs: Optional[
+        "RowOffsetStructuredSpinningLidarModelParametersExt"
+    ] = None,
 ):
     if camera_model == "lidar":
         assert lidar_coeffs is not None, (
@@ -202,25 +211,28 @@ def create_camera_model(
             "RowOffsetStructuredSpinningLidarModel"
         )
         return RowOffsetStructuredSpinningLidarModelCUDA(lidar_coeffs.to_cpp())
-    else:
-        assert width is not None, "width is required for non-lidar camera models"
-        assert height is not None, "height is required for non-lidar camera models"
-        assert principal_points is not None, (
-            "principal_points is required for non-lidar camera models"
-        )
-        BaseCameraModelCUDA = _make_lazy_cuda_cls("BaseCameraModel")
-        return BaseCameraModelCUDA.create(
-            width,
-            height,
-            camera_model,
-            principal_points,
-            focal_lengths,
-            radial_coeffs,
-            tangential_coeffs,
-            thin_prism_coeffs,
-            ftheta_coeffs,
-            rs_type,
-        )
+    assert width is not None, (
+        "width is required for non-lidar camera models"
+    )
+    assert height is not None, (
+        "height is required for non-lidar camera models"
+    )
+    assert principal_points is not None, (
+        "principal_points is required for non-lidar camera models"
+    )
+    BaseCameraModelCUDA = _make_lazy_cuda_cls("BaseCameraModel")
+    return BaseCameraModelCUDA.create(
+        width,
+        height,
+        camera_model,
+        principal_points,
+        focal_lengths,
+        radial_coeffs,
+        tangential_coeffs,
+        thin_prism_coeffs,
+        ftheta_coeffs,
+        rs_type,
+    )
 
 
 class FOV(FOVBase):
@@ -236,7 +248,7 @@ class FOV(FOVBase):
 class RowOffsetStructuredSpinningLidarModelParametersExt(
     RowOffsetStructuredSpinningLidarModelParametersExtBase
 ):
-    """Lidar camera parameters extended with acceleration structures"""
+    """Lidar camera parameters extended with acceleration structures."""
 
     def to_cpp(self) -> Any:
         """Convert to C++ custom class instance."""
@@ -266,7 +278,7 @@ def world_to_cam(
     means: Tensor,  # [..., N, 3]
     covars: Tensor,  # [..., N, 3, 3]
     viewmats: Tensor,  # [..., C, 4, 4]
-) -> Tuple[Tensor, Tensor]:
+) -> tuple[Tensor, Tensor]:
     """Transforms Gaussians from world to camera coordinate system.
 
     Args:
@@ -320,7 +332,7 @@ def spherical_harmonics(
     degrees_to_use: int,
     dirs: Tensor,  # [..., 3]
     coeffs: Tensor,  # [..., K, 3]
-    masks: Optional[Tensor] = None,  # [...,]
+    masks: Tensor | None = None,  # [...,]
 ) -> Tensor:
     """Computes spherical harmonics.
 
@@ -355,7 +367,7 @@ def quat_scale_to_covar_preci(
     compute_covar: bool = True,
     compute_preci: bool = True,
     triu: bool = False,
-) -> Tuple[Optional[Tensor], Optional[Tensor]]:
+) -> tuple[Tensor | None, Tensor | None]:
     """Converts quaternions and scales to covariance and precision matrices.
 
     Args:
@@ -390,8 +402,9 @@ def persp_proj(
     Ks: Tensor,  # [..., C, 3, 3]
     width: int,
     height: int,
-) -> Tuple[Tensor, Tensor]:
+) -> tuple[Tensor, Tensor]:
     """Perspective projection on Gaussians.
+
     DEPRECATED: please use `proj` with `ortho=False` instead.
 
     Args:
@@ -422,7 +435,7 @@ def proj(
     width: int,
     height: int,
     camera_model: CameraModel = "pinhole",
-) -> Tuple[Tensor, Tensor]:
+) -> tuple[Tensor, Tensor]:
     """Projection of Gaussians (perspective or orthographic).
 
     Args:
@@ -431,6 +444,7 @@ def proj(
         Ks: Camera intrinsics. [..., C, 3, 3]
         width: Image width.
         height: Image height.
+        camera_model: Camera model type. Default: "pinhole".
 
     Returns:
         A tuple:
@@ -455,9 +469,9 @@ def proj(
 
 def fully_fused_projection(
     means: Tensor,  # [..., N, 3]
-    covars: Optional[Tensor],  # [..., N, 6] or None
-    quats: Optional[Tensor],  # [..., N, 4] or None
-    scales: Optional[Tensor],  # [..., N, 3] or None
+    covars: Tensor | None,  # [..., N, 6] or None
+    quats: Tensor | None,  # [..., N, 4] or None
+    scales: Tensor | None,  # [..., N, 3] or None
     viewmats: Tensor,  # [..., C, 4, 4]
     Ks: Tensor,  # [..., C, 3, 3]
     width: int,
@@ -470,8 +484,8 @@ def fully_fused_projection(
     sparse_grad: bool = False,
     calc_compensations: bool = False,
     camera_model: CameraModel = "pinhole",
-    opacities: Optional[Tensor] = None,  # [..., N] or None
-) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
+    opacities: Tensor | None = None,  # [..., N] or None
+) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
     """Projects Gaussians to 2D.
 
     This function fuse the process of computing covariances
@@ -513,6 +527,7 @@ def fully_fused_projection(
           of {`means`, `covars`, `quats`, `scales`} will be a sparse Tensor in COO layout. Default: False.
         calc_compensations: If True, a view-dependent opacity compensation factor will be computed, which
           is useful for anti-aliasing. Default: False.
+        camera_model: Camera model type. Default: "pinhole".
         opacities: Gaussian opacities in range [0, 1]. If provided, will use it to compute a tighter bounds.
             [..., N] or None. Default: None.
 
@@ -588,24 +603,23 @@ def fully_fused_projection(
             camera_model,
             opacities,
         )
-    else:
-        return _FullyFusedProjection.apply(
-            means,
-            covars,
-            quats,
-            scales,
-            viewmats,
-            Ks,
-            width,
-            height,
-            eps2d,
-            near_plane,
-            far_plane,
-            radius_clip,
-            calc_compensations,
-            camera_model,
-            opacities,
-        )
+    return _FullyFusedProjection.apply(
+        means,
+        covars,
+        quats,
+        scales,
+        viewmats,
+        Ks,
+        width,
+        height,
+        eps2d,
+        near_plane,
+        far_plane,
+        radius_clip,
+        calc_compensations,
+        camera_model,
+        opacities,
+    )
 
 
 @torch.no_grad()
@@ -619,10 +633,10 @@ def isect_tiles(
     sort: bool = True,
     segmented: bool = False,
     packed: bool = False,
-    n_images: Optional[int] = None,
-    image_ids: Optional[Tensor] = None,
-    gaussian_ids: Optional[Tensor] = None,
-) -> Tuple[Tensor, Tensor, Tensor]:
+    n_images: int | None = None,
+    image_ids: Tensor | None = None,
+    gaussian_ids: Tensor | None = None,
+) -> tuple[Tensor, Tensor, Tensor]:
     """Maps projected Gaussians to intersecting tiles.
 
     Args:
@@ -656,7 +670,9 @@ def isect_tiles(
         assert radii.shape == (nnz, 2), radii.shape
         assert depths.shape == (nnz,), depths.shape
         assert image_ids is not None, "image_ids is required if packed is True"
-        assert gaussian_ids is not None, "gaussian_ids is required if packed is True"
+        assert gaussian_ids is not None, (
+            "gaussian_ids is required if packed is True"
+        )
         assert n_images is not None, "n_images is required if packed is True"
         image_ids = image_ids.contiguous()
         gaussian_ids = gaussian_ids.contiguous()
@@ -670,7 +686,9 @@ def isect_tiles(
         assert radii.shape == image_dims + (N, 2), radii.shape
         assert depths.shape == image_dims + (N,), depths.shape
 
-    tiles_per_gauss, isect_ids, flatten_ids = _make_lazy_cuda_func("intersect_tile")(
+    tiles_per_gauss, isect_ids, flatten_ids = _make_lazy_cuda_func(
+        "intersect_tile"
+    )(
         means2d.contiguous(),
         radii.contiguous(),
         depths.contiguous(),
@@ -695,13 +713,14 @@ def isect_tiles_lidar(
     sort: bool = True,
     segmented: bool = False,
     packed: bool = False,
-    n_images: Optional[int] = None,
-    image_ids: Optional[Tensor] = None,
-    gaussian_ids: Optional[Tensor] = None,
-) -> Tuple[Tensor, Tensor, Tensor]:
+    n_images: int | None = None,
+    image_ids: Tensor | None = None,
+    gaussian_ids: Tensor | None = None,
+) -> tuple[Tensor, Tensor, Tensor]:
     """Maps projected Gaussians to intersecting tiles.
 
     Args:
+        lidar: Lidar camera parameters with acceleration structures.
         means2d: Projected Gaussian means. [..., N, 2] if packed is False, [nnz, 2] if packed is True.
         radii: Maximum radii of the projected Gaussians. [..., N, 2] if packed is False, [nnz, 2] if packed is True.
         depths: Z-depth of the projected Gaussians. [..., N] if packed is False, [nnz] if packed is True.
@@ -729,7 +748,9 @@ def isect_tiles_lidar(
         assert radii.shape == (nnz, 2), radii.shape
         assert depths.shape == (nnz,), depths.shape
         assert image_ids is not None, "image_ids is required if packed is True"
-        assert gaussian_ids is not None, "gaussian_ids is required if packed is True"
+        assert gaussian_ids is not None, (
+            "gaussian_ids is required if packed is True"
+        )
         assert n_images is not None, "n_images is required if packed is True"
         image_ids = image_ids.contiguous()
         gaussian_ids = gaussian_ids.contiguous()
@@ -792,11 +813,11 @@ def rasterize_to_pixels(
     tile_size: int,
     isect_offsets: Tensor,  # [..., tile_height, tile_width]
     flatten_ids: Tensor,  # [n_isects]
-    backgrounds: Optional[Tensor] = None,  # [..., channels]
-    masks: Optional[Tensor] = None,  # [..., tile_height, tile_width]
+    backgrounds: Tensor | None = None,  # [..., channels]
+    masks: Tensor | None = None,  # [..., tile_height, tile_width]
     packed: bool = False,
     absgrad: bool = False,
-) -> Tuple[Tensor, Tensor]:
+) -> tuple[Tensor, Tensor]:
     """Rasterizes Gaussians to pixels.
 
     Args:
@@ -820,7 +841,6 @@ def rasterize_to_pixels(
         - **Rendered colors**. [..., image_height, image_width, channels]
         - **Rendered alphas**. [..., image_height, image_width, 1]
     """
-
     image_dims = means2d.shape[:-2]
     channels = colors.shape[-1]
     device = means2d.device
@@ -880,7 +900,9 @@ def rasterize_to_pixels(
             backgrounds = torch.cat(
                 [
                     backgrounds,
-                    torch.zeros(*backgrounds.shape[:-1], padded_channels, device=device),
+                    torch.zeros(
+                        *backgrounds.shape[:-1], padded_channels, device=device
+                    ),
                 ],
                 dim=-1,
             )
@@ -928,24 +950,26 @@ def rasterize_to_pixels_eval3d(
     tile_size: int,
     isect_offsets: Tensor,  # [..., C, tile_height, tile_width]
     flatten_ids: Tensor,  # [n_isects]
-    backgrounds: Optional[Tensor] = None,  # [..., C, channels]
-    masks: Optional[Tensor] = None,  # [..., C, tile_height, tile_width]
+    backgrounds: Tensor | None = None,  # [..., C, channels]
+    masks: Tensor | None = None,  # [..., C, tile_height, tile_width]
     camera_model: CameraModel = "pinhole",
-    ut_params: Optional[UnscentedTransformParameters] = None,
-    rays: Optional[Tensor] = None,  # [..., C, H, W, 6]
+    ut_params: UnscentedTransformParameters | None = None,
+    rays: Tensor | None = None,  # [..., C, H, W, 6]
     # distortion
-    radial_coeffs: Optional[Tensor] = None,  # [..., C, 6] or [..., C, 4]
-    tangential_coeffs: Optional[Tensor] = None,  # [..., C, 2]
-    thin_prism_coeffs: Optional[Tensor] = None,  # [..., C, 4]
-    ftheta_coeffs: Optional[FThetaCameraDistortionParameters] = None,
-    lidar_coeffs: Optional[RowOffsetStructuredSpinningLidarModelParametersExt] = None,
-    external_distortion_coeffs: Optional[BivariateWindshieldModelParameters] = None,
+    radial_coeffs: Tensor | None = None,  # [..., C, 6] or [..., C, 4]
+    tangential_coeffs: Tensor | None = None,  # [..., C, 2]
+    thin_prism_coeffs: Tensor | None = None,  # [..., C, 4]
+    ftheta_coeffs: FThetaCameraDistortionParameters | None = None,
+    lidar_coeffs: RowOffsetStructuredSpinningLidarModelParametersExt
+    | None = None,
+    external_distortion_coeffs: BivariateWindshieldModelParameters
+    | None = None,
     # rolling shutter
     rolling_shutter: RollingShutterType = RollingShutterType.GLOBAL,
-    viewmats_rs: Optional[Tensor] = None,  # [..., C, 4, 4]
+    viewmats_rs: Tensor | None = None,  # [..., C, 4, 4]
     use_hit_distance: bool = False,
     return_normals: bool = False,
-) -> Tuple[Tensor, Tensor]:
+) -> tuple[Tensor, Tensor]:
     """Rasterizes Gaussians to pixels.
 
     Similar to `rasterize_to_pixels()`, but compute the Gaussian responses in the
@@ -1007,33 +1031,60 @@ def rasterize_to_pixels_eval3d_extra(
     tile_size: int,
     isect_offsets: Tensor,  # [..., C, tile_height, tile_width]
     flatten_ids: Tensor,  # [n_isects]
-    backgrounds: Optional[Tensor] = None,  # [..., C, channels]
-    masks: Optional[Tensor] = None,  # [..., C, tile_height, tile_width]
+    backgrounds: Tensor | None = None,  # [..., C, channels]
+    masks: Tensor | None = None,  # [..., C, tile_height, tile_width]
     camera_model: CameraModel = "pinhole",
-    ut_params: Optional[UnscentedTransformParameters] = None,
-    rays: Optional[Tensor] = None,  # [..., C, P, 6]
+    ut_params: UnscentedTransformParameters | None = None,
+    rays: Tensor | None = None,  # [..., C, P, 6]
     # distortion
-    radial_coeffs: Optional[Tensor] = None,  # [..., C, 6] or [..., C, 4]
-    tangential_coeffs: Optional[Tensor] = None,  # [..., C, 2]
-    thin_prism_coeffs: Optional[Tensor] = None,  # [..., C, 4]
-    ftheta_coeffs: Optional[FThetaCameraDistortionParameters] = None,
-    lidar_coeffs: Optional[RowOffsetStructuredSpinningLidarModelParametersExt] = None,
-    external_distortion_coeffs: Optional[BivariateWindshieldModelParameters] = None,
+    radial_coeffs: Tensor | None = None,  # [..., C, 6] or [..., C, 4]
+    tangential_coeffs: Tensor | None = None,  # [..., C, 2]
+    thin_prism_coeffs: Tensor | None = None,  # [..., C, 4]
+    ftheta_coeffs: FThetaCameraDistortionParameters | None = None,
+    lidar_coeffs: RowOffsetStructuredSpinningLidarModelParametersExt
+    | None = None,
+    external_distortion_coeffs: BivariateWindshieldModelParameters
+    | None = None,
     # rolling shutter
     rolling_shutter: RollingShutterType = RollingShutterType.GLOBAL,
-    viewmats_rs: Optional[Tensor] = None,  # [..., C, 4, 4]
+    viewmats_rs: Tensor | None = None,  # [..., C, 4, 4]
     return_sample_counts: bool = False,
     use_hit_distance: bool = False,
     return_normals: bool = False,
-) -> Tuple[Tensor, Tensor, Tensor, Optional[Tensor], Optional[Tensor]]:
+) -> tuple[Tensor, Tensor, Tensor, Tensor | None, Tensor | None]:
     """Rasterizes Gaussians to pixels, returning extra information for debugging.
 
     Similar to `rasterize_to_pixels_eval3d()`, but returns turns the last gaussian id
     accumulated in a pixel, and optionally the number of accumulated samples per pixel.
 
     Args:
-        return_last_ids: If True, also return last flatten_idx per pixel. Default: False.
+        means: Gaussian means. [..., N, 3]
+        quats: Quaternions. [..., N, 4]
+        scales: Scales. [..., N, 3]
+        colors: Gaussian colors. [..., C, N, channels]
+        opacities: Gaussian opacities. [..., C, N]
+        viewmats: World-to-camera matrices. [..., C, 4, 4]
+        Ks: Camera intrinsics. [..., C, 3, 3]
+        image_width: Image width.
+        image_height: Image height.
+        tile_size: Tile size for culling.
+        isect_offsets: Intersection offsets from isect_offset_encode. [..., C, tile_height, tile_width]
+        flatten_ids: Flattened Gaussian IDs from isect_tiles. [n_isects]
+        backgrounds: Background colors. [..., C, channels]. Default: None.
+        masks: Optional tile mask. [..., C, tile_height, tile_width]. Default: None.
+        camera_model: Camera model type. Default: "pinhole".
+        ut_params: Unscented Transform parameters.
+        rays: Optional precomputed rays [..., C, P, 6].
+        radial_coeffs: Radial distortion coefficients. [..., C, 6] or [..., C, 4]. Default: None.
+        tangential_coeffs: Tangential distortion coefficients. [..., C, 2]. Default: None.
+        thin_prism_coeffs: Thin prism distortion coefficients. [..., C, 4]. Default: None.
+        ftheta_coeffs: F-theta camera parameters. Default: None.
+        lidar_coeffs: Lidar camera parameters. Default: None.
+        external_distortion_coeffs: Bivariate windshield distortion parameters. Default: None.
+        rolling_shutter: Rolling shutter type. Default: GLOBAL.
+        viewmats_rs: End camera view matrices for rolling shutter. [..., C, 4, 4]. Default: None.
         return_sample_counts: If True, also return number of accumulated samples per pixel. Default: False.
+        use_hit_distance: If True, use hit distance for depth. Default: False.
         return_normals: If True, compute and return accumulated normals per pixel.
             Normals are computed from Gaussian quaternions (canonical normal = (0,0,1)
             transformed by rotation, flipped if facing away from ray). Default: False.
@@ -1072,15 +1123,16 @@ def rasterize_to_pixels_eval3d_extra(
     assert colors.ndim in (num_batch_dims + 2, num_batch_dims + 3), colors.shape
     if colors.ndim == num_batch_dims + 2:
         raise NotImplementedError("packed mode is not supported yet")
-        assert colors.shape[:-2] == batch_dims and colors.shape[-1] == channels, (
-            colors.shape
-        )
-    else:
-        assert colors.shape == batch_dims + (C, N, channels), colors.shape
+        assert (
+            colors.shape[:-2] == batch_dims and colors.shape[-1] == channels
+        ), colors.shape
+    assert colors.shape == batch_dims + (C, N, channels), colors.shape
     assert opacities.shape == colors.shape[:-1], opacities.shape
 
     if backgrounds is not None:
-        assert backgrounds.shape == batch_dims + (C, channels), backgrounds.shape
+        assert backgrounds.shape == batch_dims + (C, channels), (
+            backgrounds.shape
+        )
         backgrounds = backgrounds.contiguous()
 
     if masks is not None:
@@ -1088,17 +1140,21 @@ def rasterize_to_pixels_eval3d_extra(
         masks = masks.contiguous()
 
     if radial_coeffs is not None:
-        assert radial_coeffs.shape[:-1] == batch_dims + (C,) and radial_coeffs.shape[
-            -1
-        ] in (6, 4), radial_coeffs.shape
+        assert radial_coeffs.shape[:-1] == batch_dims + (
+            C,
+        ) and radial_coeffs.shape[-1] in (6, 4), radial_coeffs.shape
         radial_coeffs = radial_coeffs.contiguous()
 
     if tangential_coeffs is not None:
-        assert tangential_coeffs.shape == batch_dims + (C, 2), tangential_coeffs.shape
+        assert tangential_coeffs.shape == batch_dims + (C, 2), (
+            tangential_coeffs.shape
+        )
         tangential_coeffs = tangential_coeffs.contiguous()
 
     if thin_prism_coeffs is not None:
-        assert thin_prism_coeffs.shape == batch_dims + (C, 4), thin_prism_coeffs.shape
+        assert thin_prism_coeffs.shape == batch_dims + (C, 4), (
+            thin_prism_coeffs.shape
+        )
         thin_prism_coeffs = thin_prism_coeffs.contiguous()
 
     if viewmats_rs is not None:
@@ -1150,7 +1206,9 @@ def rasterize_to_pixels_eval3d_extra(
             backgrounds = torch.cat(
                 [
                     backgrounds,
-                    torch.zeros(*backgrounds.shape[:-1], padded_channels, device=device),
+                    torch.zeros(
+                        *backgrounds.shape[:-1], padded_channels, device=device
+                    ),
                 ],
                 dim=-1,
             )
@@ -1198,8 +1256,12 @@ def rasterize_to_pixels_eval3d_extra(
         rays.contiguous() if rays is not None else None,
         # distortion
         radial_coeffs.contiguous() if radial_coeffs is not None else None,
-        tangential_coeffs.contiguous() if tangential_coeffs is not None else None,
-        thin_prism_coeffs.contiguous() if thin_prism_coeffs is not None else None,
+        tangential_coeffs.contiguous()
+        if tangential_coeffs is not None
+        else None,
+        thin_prism_coeffs.contiguous()
+        if thin_prism_coeffs is not None
+        else None,
         ftheta_coeffs,
         lidar_coeffs,
         external_distortion_coeffs,
@@ -1215,7 +1277,10 @@ def rasterize_to_pixels_eval3d_extra(
 
     if padded_channels > 0:
         render_colors = torch.cat(
-            [render_colors[..., : -padded_channels - 1], render_colors[..., -1:]],
+            [
+                render_colors[..., : -padded_channels - 1],
+                render_colors[..., -1:],
+            ],
             dim=-1,
         )
 
@@ -1235,7 +1300,7 @@ def rasterize_to_indices_in_range(
     tile_size: int,
     isect_offsets: Tensor,  # [..., tile_height, tile_width]
     flatten_ids: Tensor,  # [n_isects]
-) -> Tuple[Tensor, Tensor, Tensor]:
+) -> tuple[Tensor, Tensor, Tensor]:
     """Rasterizes a batch of Gaussians to images but only returns the indices.
 
     .. note::
@@ -1265,7 +1330,6 @@ def rasterize_to_indices_in_range(
         - **Pixel ids**. pixel indices (row-major). A flattened list of shape [M].
         - **Image ids**. image indices. A flattened list of shape [M].
     """
-
     image_dims = means2d.shape[:-2]
     tile_height, tile_width = isect_offsets.shape[-2:]
     N = means2d.shape[-2]
@@ -1287,7 +1351,9 @@ def rasterize_to_indices_in_range(
         f"Assert Failed: {tile_width} * {tile_size} >= {image_width}"
     )
 
-    out_gauss_ids, out_indices = _make_lazy_cuda_func("rasterize_to_indices_3dgs")(
+    out_gauss_ids, out_indices = _make_lazy_cuda_func(
+        "rasterize_to_indices_3dgs"
+    )(
         range_start,
         range_end,
         transmittances.contiguous(),
@@ -1316,7 +1382,7 @@ class _QuatScaleToCovarPreci(torch.autograd.Function):
         compute_covar: bool = True,
         compute_preci: bool = True,
         triu: bool = False,
-    ) -> Tuple[Tensor, Tensor]:
+    ) -> tuple[Tensor, Tensor]:
         covars, precis = _make_lazy_cuda_func("quat_scale_to_covar_preci_fwd")(
             quats, scales, compute_covar, compute_preci, triu
         )
@@ -1336,7 +1402,9 @@ class _QuatScaleToCovarPreci(torch.autograd.Function):
             v_covars = v_covars.to_dense()
         if compute_preci and v_precis.is_sparse:
             v_precis = v_precis.to_dense()
-        v_quats, v_scales = _make_lazy_cuda_func("quat_scale_to_covar_preci_bwd")(
+        v_quats, v_scales = _make_lazy_cuda_func(
+            "quat_scale_to_covar_preci_bwd"
+        )(
             quats,
             scales,
             triu,
@@ -1364,7 +1432,7 @@ class _Proj(torch.autograd.Function):
         width: int,
         height: int,
         camera_model: CameraModel = "pinhole",
-    ) -> Tuple[Tensor, Tensor]:
+    ) -> tuple[Tensor, Tensor]:
         assert camera_model != "ftheta", (
             "ftheta camera is only supported via UT, please set with_ut=True in the rasterization()"
         )
@@ -1433,8 +1501,8 @@ class _FullyFusedProjection(torch.autograd.Function):
         radius_clip: float,
         calc_compensations: bool,
         camera_model: CameraModel = "pinhole",
-        opacities: Optional[Tensor] = None,  # [..., N] or None
-    ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
+        opacities: Tensor | None = None,  # [..., N] or None
+    ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
         assert camera_model != "ftheta", (
             "ftheta camera is only supported via UT, please set with_ut=True in the rasterization()"
         )
@@ -1466,7 +1534,15 @@ class _FullyFusedProjection(torch.autograd.Function):
         if not calc_compensations:
             compensations = None
         ctx.save_for_backward(
-            means, covars, quats, scales, viewmats, Ks, radii, conics, compensations
+            means,
+            covars,
+            quats,
+            scales,
+            viewmats,
+            Ks,
+            radii,
+            conics,
+            compensations,
         )
         ctx.width = width
         ctx.height = height
@@ -1550,7 +1626,7 @@ def fully_fused_projection_with_ut(
     means: Tensor,  # [..., N, 3]
     quats: Tensor,  # [..., N, 4]
     scales: Tensor,  # [..., N, 3]
-    opacities: Optional[Tensor],  # [..., N]
+    opacities: Tensor | None,  # [..., N]
     viewmats: Tensor,  # [..., C, 4, 4]
     Ks: Tensor,  # [..., C, 3, 3]
     width: int,
@@ -1561,19 +1637,21 @@ def fully_fused_projection_with_ut(
     radius_clip: float = 0.0,
     calc_compensations: bool = False,
     camera_model: CameraModel = "pinhole",
-    ut_params: Optional[UnscentedTransformParameters] = None,
+    ut_params: UnscentedTransformParameters | None = None,
     # distortion
-    radial_coeffs: Optional[Tensor] = None,  # [..., C, 6] or [..., C, 4]
-    tangential_coeffs: Optional[Tensor] = None,  # [..., C, 2]
-    thin_prism_coeffs: Optional[Tensor] = None,  # [..., C, 4]
-    ftheta_coeffs: Optional[FThetaCameraDistortionParameters] = None,
-    lidar_coeffs: Optional[RowOffsetStructuredSpinningLidarModelParametersExt] = None,
-    external_distortion_coeffs: Optional[BivariateWindshieldModelParameters] = None,
+    radial_coeffs: Tensor | None = None,  # [..., C, 6] or [..., C, 4]
+    tangential_coeffs: Tensor | None = None,  # [..., C, 2]
+    thin_prism_coeffs: Tensor | None = None,  # [..., C, 4]
+    ftheta_coeffs: FThetaCameraDistortionParameters | None = None,
+    lidar_coeffs: RowOffsetStructuredSpinningLidarModelParametersExt
+    | None = None,
+    external_distortion_coeffs: BivariateWindshieldModelParameters
+    | None = None,
     # rolling shutter
     rolling_shutter: RollingShutterType = RollingShutterType.GLOBAL,
-    viewmats_rs: Optional[Tensor] = None,  # [..., C, 4, 4]
+    viewmats_rs: Tensor | None = None,  # [..., C, 4, 4]
     global_z_order: bool = True,
-) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
+) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
     """Projects Gaussians to 2D using Unscented Transform (UT).
 
     similar to `fully_fused_projection()`, but supports camera distortion and
@@ -1583,11 +1661,32 @@ def fully_fused_projection_with_ut(
         This function is not differentiable to any input.
 
     Args:
+        means: Gaussian means. [..., N, 3]
+        quats: Quaternions. [..., N, 4]
+        scales: Scales. [..., N, 3]
+        opacities: Gaussian opacities. [..., N] or None.
+        viewmats: Start camera view matrices. [..., C, 4, 4]
+        Ks: Camera intrinsics. [..., C, 3, 3]
+        width: Image width.
+        height: Image height.
+        eps2d: Epsilon for 2D covariance stability. Default: 0.3.
+        near_plane: Near plane distance. Default: 0.01.
+        far_plane: Far plane distance. Default: 1e10.
+        radius_clip: Minimum projected radius. Default: 0.0.
+        calc_compensations: If True, compute opacity compensation. Default: False.
+        camera_model: Camera model type. Default: "pinhole".
+        ut_params: Unscented Transform parameters. Default: None.
+        radial_coeffs: Radial distortion coefficients. [..., C, 6] or [..., C, 4]. Default: None.
+        tangential_coeffs: Tangential distortion coefficients. [..., C, 2]. Default: None.
+        thin_prism_coeffs: Thin prism coefficients. [..., C, 4]. Default: None.
+        ftheta_coeffs: F-theta camera parameters. Default: None.
+        lidar_coeffs: Lidar camera parameters. Default: None.
+        external_distortion_coeffs: Bivariate windshield distortion parameters. Default: None.
+        rolling_shutter: Rolling shutter type. Default: GLOBAL.
+        viewmats_rs: End camera view matrices for rolling shutter. [..., C, 4, 4]. Default: None.
         global_z_order: Defines how Gaussians are sorted for depth ordering. If True (default),
             Gaussians are sorted by their z-coordinate in camera space. If False, they are sorted
-            by their Euclidean distance from the camera origin.             The z-coordinate sorting is typically
-            faster and sufficient for most cases, while Euclidean distance can be useful for scenes
-            with wide field-of-view or non-standard camera models. Default: True.
+            by their Euclidean distance from the camera origin. Default: True.
     """
     if ut_params is None:
         ut_params = UnscentedTransformParameters()
@@ -1603,13 +1702,17 @@ def fully_fused_projection_with_ut(
     assert viewmats.shape == batch_dims + (C, 4, 4), viewmats.shape
     assert Ks.shape == batch_dims + (C, 3, 3), Ks.shape
     if radial_coeffs is not None:
-        assert radial_coeffs.shape[:-1] == batch_dims + (C,) and radial_coeffs.shape[
-            -1
-        ] in [6, 4], radial_coeffs.shape
+        assert radial_coeffs.shape[:-1] == batch_dims + (
+            C,
+        ) and radial_coeffs.shape[-1] in [6, 4], radial_coeffs.shape
     if tangential_coeffs is not None:
-        assert tangential_coeffs.shape == batch_dims + (C, 2), tangential_coeffs.shape
+        assert tangential_coeffs.shape == batch_dims + (C, 2), (
+            tangential_coeffs.shape
+        )
     if thin_prism_coeffs is not None:
-        assert thin_prism_coeffs.shape == batch_dims + (C, 4), thin_prism_coeffs.shape
+        assert thin_prism_coeffs.shape == batch_dims + (C, 4), (
+            thin_prism_coeffs.shape
+        )
     if viewmats_rs is not None:
         assert viewmats_rs.shape == batch_dims + (C, 4, 4), viewmats_rs.shape
 
@@ -1618,7 +1721,9 @@ def fully_fused_projection_with_ut(
             lidar_coeffs, RowOffsetStructuredSpinningLidarModelParametersExt
         )
 
-    camera_model_type = _make_lazy_cuda_obj(f"CameraModelType.{camera_model.upper()}")
+    camera_model_type = _make_lazy_cuda_obj(
+        f"CameraModelType.{camera_model.upper()}"
+    )
     ftheta_coeffs = (
         ftheta_coeffs
         if ftheta_coeffs is not None
@@ -1647,8 +1752,12 @@ def fully_fused_projection_with_ut(
         ut_params,
         rolling_shutter,
         radial_coeffs.contiguous() if radial_coeffs is not None else None,
-        tangential_coeffs.contiguous() if tangential_coeffs is not None else None,
-        thin_prism_coeffs.contiguous() if thin_prism_coeffs is not None else None,
+        tangential_coeffs.contiguous()
+        if tangential_coeffs is not None
+        else None,
+        thin_prism_coeffs.contiguous()
+        if thin_prism_coeffs is not None
+        else None,
         ftheta_coeffs,
         lidar_coeffs.to_cpp() if lidar_coeffs is not None else None,
         external_distortion_coeffs,
@@ -1659,7 +1768,7 @@ def fully_fused_projection_with_ut(
 
 
 class _RasterizeToPixels(torch.autograd.Function):
-    """Rasterize gaussians"""
+    """Rasterize Gaussians to pixels."""
 
     @staticmethod
     def forward(
@@ -1676,7 +1785,7 @@ class _RasterizeToPixels(torch.autograd.Function):
         isect_offsets: Tensor,  # [..., tile_height, tile_width]
         flatten_ids: Tensor,  # [n_isects]
         absgrad: bool,
-    ) -> Tuple[Tensor, Tensor]:
+    ) -> tuple[Tensor, Tensor]:
         render_colors, render_alphas, last_ids = _make_lazy_cuda_func(
             "rasterize_to_pixels_3dgs_fwd"
         )(
@@ -1766,9 +1875,9 @@ class _RasterizeToPixels(torch.autograd.Function):
             means2d.absgrad = v_means2d_abs
 
         if ctx.needs_input_grad[4]:
-            v_backgrounds = (v_render_colors * (1.0 - render_alphas).float()).sum(
-                dim=(-3, -2)
-            )
+            v_backgrounds = (
+                v_render_colors * (1.0 - render_alphas).float()
+            ).sum(dim=(-3, -2))
         else:
             v_backgrounds = None
 
@@ -1789,7 +1898,7 @@ class _RasterizeToPixels(torch.autograd.Function):
 
 
 class _RasterizeToPixelsEval3D(torch.autograd.Function):
-    """Rasterize gaussians"""
+    """Rasterize Gaussians to pixels (3D evaluation mode)."""
 
     @staticmethod
     def forward(
@@ -1809,24 +1918,24 @@ class _RasterizeToPixelsEval3D(torch.autograd.Function):
         isect_offsets: Tensor,  # [..., C, tile_height, tile_width]
         flatten_ids: Tensor,  # [..., n_isects]
         camera_model: CameraModel = "pinhole",
-        ut_params: Optional[UnscentedTransformParameters] = None,
-        rays: Optional[Tensor] = None,  # [..., C, P, 6]
+        ut_params: UnscentedTransformParameters | None = None,
+        rays: Tensor | None = None,  # [..., C, P, 6]
         # distortion
-        radial_coeffs: Optional[Tensor] = None,  # [..., C, 6] or [..., C, 4]
-        tangential_coeffs: Optional[Tensor] = None,  # [..., C, 2]
-        thin_prism_coeffs: Optional[Tensor] = None,  # [..., C, 4]
-        ftheta_coeffs: Optional[FThetaCameraDistortionParameters] = None,
-        lidar_coeffs: Optional[
-            RowOffsetStructuredSpinningLidarModelParametersExt
-        ] = None,
-        external_distortion_coeffs: Optional[BivariateWindshieldModelParameters] = None,
+        radial_coeffs: Tensor | None = None,  # [..., C, 6] or [..., C, 4]
+        tangential_coeffs: Tensor | None = None,  # [..., C, 2]
+        thin_prism_coeffs: Tensor | None = None,  # [..., C, 4]
+        ftheta_coeffs: FThetaCameraDistortionParameters | None = None,
+        lidar_coeffs: RowOffsetStructuredSpinningLidarModelParametersExt
+        | None = None,
+        external_distortion_coeffs: BivariateWindshieldModelParameters
+        | None = None,
         # rolling shutter
         rolling_shutter: RollingShutterType = RollingShutterType.GLOBAL,
-        viewmats_rs: Optional[Tensor] = None,  # [..., C, 4, 4]
+        viewmats_rs: Tensor | None = None,  # [..., C, 4, 4]
         return_sample_counts: bool = False,
         use_hit_distance: bool = False,
         return_normals: bool = False,
-    ) -> Tuple[Tensor, Tensor, Tensor, Optional[Tensor], Optional[Tensor]]:
+    ) -> tuple[Tensor, Tensor, Tensor, Tensor | None, Tensor | None]:
         if ut_params is None:
             ut_params = UnscentedTransformParameters()
 
@@ -1839,7 +1948,9 @@ class _RasterizeToPixelsEval3D(torch.autograd.Function):
             else FThetaCameraDistortionParameters()
         )
 
-        lidar_coeffs = lidar_coeffs.to_cpp() if lidar_coeffs is not None else None
+        lidar_coeffs = (
+            lidar_coeffs.to_cpp() if lidar_coeffs is not None else None
+        )
 
         # Extract batch_dims for sample_counts allocation
         batch_dims = means.shape[:-2]
@@ -1849,7 +1960,9 @@ class _RasterizeToPixelsEval3D(torch.autograd.Function):
         if return_sample_counts:
             # Allocate with correct final shape (batch_dims, C, H, W)
             sample_counts = torch.empty(
-                batch_dims + (C, height, width), dtype=torch.int32, device=means.device
+                batch_dims + (C, height, width),
+                dtype=torch.int32,
+                device=means.device,
             )
         else:
             sample_counts = None
@@ -1928,18 +2041,24 @@ class _RasterizeToPixelsEval3D(torch.autograd.Function):
         ctx.external_distortion_coeffs = external_distortion_coeffs
         ctx.use_hit_distance = use_hit_distance
 
-        return render_colors, render_alphas, last_ids, sample_counts, render_normals
+        return (
+            render_colors,
+            render_alphas,
+            last_ids,
+            sample_counts,
+            render_normals,
+        )
 
     @staticmethod
     def backward(
         ctx,
         v_render_colors: Tensor,  # [..., C, H, W, 3]
         v_render_alphas: Tensor,  # [..., C, H, W, 1]
-        v_last_ids: Optional[Tensor],  # None - last_ids is integer (non-differentiable)
-        v_sample_counts: Optional[
-            Tensor
-        ],  # None - sample_counts is integer (non-differentiable)
-        v_render_normals: Optional[Tensor],  # [..., C, H, W, 3]
+        v_last_ids: Tensor
+        | None,  # None - last_ids is integer (non-differentiable)
+        v_sample_counts: Tensor
+        | None,  # None - sample_counts is integer (non-differentiable)
+        v_render_normals: Tensor | None,  # [..., C, H, W, 3]
     ):
         (
             means,
@@ -2010,13 +2129,15 @@ class _RasterizeToPixelsEval3D(torch.autograd.Function):
             last_ids,
             v_render_colors.contiguous(),
             v_render_alphas.contiguous(),
-            v_render_normals.contiguous() if v_render_normals is not None else None,
+            v_render_normals.contiguous()
+            if v_render_normals is not None
+            else None,
         )
 
         if ctx.needs_input_grad[5]:  # backgrounds
-            v_backgrounds = (v_render_colors * (1.0 - render_alphas).float()).sum(
-                dim=(-3, -2)
-            )
+            v_backgrounds = (
+                v_render_colors * (1.0 - render_alphas).float()
+            ).sum(dim=(-3, -2))
         else:
             v_backgrounds = None
 
@@ -2077,8 +2198,8 @@ class _FullyFusedProjectionPacked(torch.autograd.Function):
         sparse_grad: bool,
         calc_compensations: bool,
         camera_model: CameraModel = "pinhole",
-        opacities: Optional[Tensor] = None,  # [..., N] or None
-    ) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
+        opacities: Tensor | None = None,  # [..., N] or None
+    ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
         assert camera_model != "ftheta", (
             "ftheta camera is only supported via UT, please set with_ut=True in the rasterization()"
         )
@@ -2279,7 +2400,7 @@ class _FullyFusedProjectionPacked(torch.autograd.Function):
 
 
 class _SphericalHarmonics(torch.autograd.Function):
-    """Spherical Harmonics"""
+    """Spherical Harmonics evaluation."""
 
     @staticmethod
     def forward(
@@ -2333,8 +2454,8 @@ def fully_fused_projection_2dgs(
     radius_clip: float = 0.0,
     packed: bool = False,
     sparse_grad: bool = False,
-) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
-    """Prepare Gaussians for rasterization
+) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+    """Prepare Gaussians for rasterization.
 
     This function prepares ray-splat intersection matrices, computes
     per splat bounding box and 2D means in image space.
@@ -2347,6 +2468,7 @@ def fully_fused_projection_2dgs(
         Ks: Camera intrinsics. [..., C, 3, 3]
         width: Image width.
         height: Image height.
+        eps2d: Epsilon for 2D covariance stability. Default: 0.3.
         near_plane: Near plane distance. Default: 0.01.
         far_plane: Far plane distance. Default: 200.
         radius_clip: Gaussians with projected radii smaller than this value will be ignored. Default: 0.0.
@@ -2409,20 +2531,19 @@ def fully_fused_projection_2dgs(
             radius_clip,
             sparse_grad,
         )
-    else:
-        return _FullyFusedProjection2DGS.apply(
-            means,
-            quats,
-            scales,
-            viewmats,
-            Ks,
-            width,
-            height,
-            eps2d,
-            near_plane,
-            far_plane,
-            radius_clip,
-        )
+    return _FullyFusedProjection2DGS.apply(
+        means,
+        quats,
+        scales,
+        viewmats,
+        Ks,
+        width,
+        height,
+        eps2d,
+        near_plane,
+        far_plane,
+        radius_clip,
+    )
 
 
 class _FullyFusedProjection2DGS(torch.autograd.Function):
@@ -2442,7 +2563,7 @@ class _FullyFusedProjection2DGS(torch.autograd.Function):
         near_plane: float,
         far_plane: float,
         radius_clip: float,
-    ) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
+    ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
         radii, means2d, depths, ray_transforms, normals = _make_lazy_cuda_func(
             "projection_2dgs_fused_fwd"
         )(
@@ -2475,7 +2596,9 @@ class _FullyFusedProjection2DGS(torch.autograd.Function):
         return radii, means2d, depths, ray_transforms, normals
 
     @staticmethod
-    def backward(ctx, v_radii, v_means2d, v_depths, v_ray_transforms, v_normals):
+    def backward(
+        ctx, v_radii, v_means2d, v_depths, v_ray_transforms, v_normals
+    ):
         (
             means,
             quats,
@@ -2549,7 +2672,7 @@ class _FullyFusedProjectionPacked2DGS(torch.autograd.Function):
         far_plane: float,
         radius_clip: float,
         sparse_grad: bool,
-    ) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
+    ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
         (
             indptr,
             batch_ids,
@@ -2718,12 +2841,12 @@ def rasterize_to_pixels_2dgs(
     tile_size: int,
     isect_offsets: Tensor,  # [..., tile_height, tile_width]
     flatten_ids: Tensor,  # [n_isects]
-    backgrounds: Optional[Tensor] = None,  # [..., channels]
-    masks: Optional[Tensor] = None,  # [..., tile_height, tile_width]
+    backgrounds: Tensor | None = None,  # [..., channels]
+    masks: Tensor | None = None,  # [..., tile_height, tile_width]
     packed: bool = False,
     absgrad: bool = False,
     distloss: bool = False,
-) -> Tuple[Tensor, Tensor]:
+) -> tuple[Tensor, Tensor]:
     """Rasterize Gaussians to pixels.
 
     Args:
@@ -2733,6 +2856,8 @@ def rasterize_to_pixels_2dgs(
         opacities: Gaussian opacities that support per-view values. [..., N] if packed is False, [nnz] if packed is True.
         normals: The normals in camera space. [..., N, 3] if packed is False, [nnz, 3] if packed is True.
         densify: Dummy variable to keep track of gradient for densification. [..., N, 2] if packed, [nnz, 3] if packed is True.
+        image_width: Image width.
+        image_height: Image height.
         tile_size: Tile size.
         isect_offsets: Intersection offsets outputs from `isect_offset_encode()`. [..., tile_height, tile_width]
         flatten_ids: The global flatten indices in [I * N] or [nnz] from  `isect_tiles()`. [n_isects]
@@ -2740,6 +2865,7 @@ def rasterize_to_pixels_2dgs(
         masks: Optional tile mask to skip rendering GS to masked tiles. [..., tile_height, tile_width]. Default: None.
         packed: If True, the input tensors are expected to be packed with shape [nnz, ...]. Default: False.
         absgrad: If True, the backward pass will compute a `.absgrad` attribute for `means2d`. Default: False.
+        distloss: If True, compute distortion loss. Default: False.
 
     Returns:
         A tuple:
@@ -2764,7 +2890,9 @@ def rasterize_to_pixels_2dgs(
     else:
         N = means2d.size(-2)
         assert means2d.shape == image_dims + (N, 2), means2d.shape
-        assert ray_transforms.shape == image_dims + (N, 3, 3), ray_transforms.shape
+        assert ray_transforms.shape == image_dims + (N, 3, 3), (
+            ray_transforms.shape
+        )
         assert colors.shape[:-2] == image_dims, colors.shape
         assert opacities.shape == image_dims + (N,), opacities.shape
     if backgrounds is not None:
@@ -2790,7 +2918,9 @@ def rasterize_to_pixels_2dgs(
             backgrounds = torch.cat(
                 [
                     backgrounds,
-                    torch.zeros(*backgrounds.shape[:-1], padded_channels, device=device),
+                    torch.zeros(
+                        *backgrounds.shape[:-1], padded_channels, device=device
+                    ),
                 ],
                 dim=-1,
             )
@@ -2830,11 +2960,20 @@ def rasterize_to_pixels_2dgs(
 
     if padded_channels > 0:
         render_colors = torch.cat(
-            [render_colors[..., : -padded_channels - 1], render_colors[..., -1:]],
+            [
+                render_colors[..., : -padded_channels - 1],
+                render_colors[..., -1:],
+            ],
             dim=-1,
         )
 
-    return render_colors, render_alphas, render_normals, render_distort, render_median
+    return (
+        render_colors,
+        render_alphas,
+        render_normals,
+        render_distort,
+        render_median,
+    )
 
 
 @torch.no_grad()
@@ -2850,7 +2989,7 @@ def rasterize_to_indices_in_range_2dgs(
     tile_size: int,
     isect_offsets: Tensor,
     flatten_ids: Tensor,
-) -> Tuple[Tensor, Tensor, Tensor]:
+) -> tuple[Tensor, Tensor, Tensor]:
     """Rasterizes a batch of Gaussians to images but only returns the indices.
 
     .. note::
@@ -2881,7 +3020,6 @@ def rasterize_to_indices_in_range_2dgs(
         - **Camera ids**. Camera indices. A flattened list of shape [M].
         - **Batch ids**. Batch indices. A flattened list of shape [M].
     """
-
     image_dims = means2d.shape[:-2]
     tile_height, tile_width = isect_offsets.shape[-2:]
     N = means2d.shape[-2]
@@ -2903,7 +3041,9 @@ def rasterize_to_indices_in_range_2dgs(
         f"Assert Failed: {tile_width} * {tile_size} >= {image_width}"
     )
 
-    out_gauss_ids, out_indices = _make_lazy_cuda_func("rasterize_to_indices_2dgs")(
+    out_gauss_ids, out_indices = _make_lazy_cuda_func(
+        "rasterize_to_indices_2dgs"
+    )(
         range_start,
         range_end,
         transmittances.contiguous(),
@@ -2922,7 +3062,7 @@ def rasterize_to_indices_in_range_2dgs(
 
 
 class _RasterizeToPixels2DGS(torch.autograd.Function):
-    """Rasterize gaussians 2DGS"""
+    """Rasterize 2DGS Gaussians to pixels."""
 
     @staticmethod
     def forward(
@@ -2942,7 +3082,7 @@ class _RasterizeToPixels2DGS(torch.autograd.Function):
         flatten_ids: Tensor,
         absgrad: bool,
         distloss: bool,
-    ) -> Tuple[Tensor, Tensor]:
+    ) -> tuple[Tensor, Tensor]:
         (
             render_colors,
             render_alphas,
@@ -3067,9 +3207,9 @@ class _RasterizeToPixels2DGS(torch.autograd.Function):
             means2d.absgrad = v_means2d_abs
 
         if ctx.needs_input_grad[6]:
-            v_backgrounds = (v_render_colors * (1.0 - render_alphas).float()).sum(
-                dim=(-3, -2)
-            )
+            v_backgrounds = (
+                v_render_colors * (1.0 - render_alphas).float()
+            ).sum(dim=(-3, -2))
         else:
             v_backgrounds = None
 

@@ -85,7 +85,9 @@ class DownloadData:
             download_and_extract(url, download_path, extract_path)
 
 
-def download_and_extract(url: str, download_path: Path, extract_path: Path) -> None:
+def download_and_extract(
+    url: str, download_path: Path, extract_path: Path
+) -> None:
     download_path.parent.mkdir(parents=True, exist_ok=True)
     extract_path.mkdir(parents=True, exist_ok=True)
 

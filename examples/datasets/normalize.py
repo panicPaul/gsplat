@@ -17,8 +17,7 @@ import numpy as np
 
 
 def similarity_from_cameras(c2w, strict_scaling=False, center_method="focus"):
-    """
-    reference: nerf-factory
+    """reference: nerf-factory
     Get a similarity transform to normalize dataset
     from c2w (OpenCV convention) cameras
     :param c2w: (N, 4)

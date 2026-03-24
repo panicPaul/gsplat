@@ -19,10 +19,12 @@ import torch
 
 
 def color_correct_quadratic(
-    img: torch.Tensor, ref: torch.Tensor, num_iters: int = 5, eps: float = 0.5 / 255
+    img: torch.Tensor,
+    ref: torch.Tensor,
+    num_iters: int = 5,
+    eps: float = 0.5 / 255,
 ) -> torch.Tensor:
-    """
-    Warp `img` to match the colors in `ref_img` using iterative color matching.
+    """Warp `img` to match the colors in `ref_img` using iterative color matching.
 
     This function performs color correction by warping the colors of the input image
     to match those of a reference image. It uses a least squares method to find a
@@ -96,8 +98,7 @@ def color_correct_quadratic(
 
 
 def color_correct_affine(img: torch.Tensor, ref: torch.Tensor) -> torch.Tensor:
-    """
-    Warp `img` to match the colors in `ref` using per-channel affine transformation.
+    """Warp `img` to match the colors in `ref` using per-channel affine transformation.
 
     This function computes a per-channel affine best fit (a * ref + b = img) from the reference
     to the input image, then applies the inverse mapping to correct the input image

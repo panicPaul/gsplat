@@ -20,18 +20,18 @@ This module contains mathematical utilities used by camera models and other comp
 including numerically stable computations and polynomial evaluation helpers.
 """
 
+from abc import ABC, abstractmethod
+
 import numpy as np
 import torch
 import torch.nn.functional as F
-from abc import ABC, abstractmethod
-from typing import Optional, Tuple
 from torch import Tensor
+
 from gsplat._helper import assert_shape
 
 
 def _numerically_stable_norm2(x: Tensor, y: Tensor) -> Tensor:
-    """
-    Compute 2-norm of [x, y] vectors in a numerically stable way.
+    """Compute 2-norm of [x, y] vectors in a numerically stable way.
 
     Avoids overflow/underflow for very large or very small values by
     normalizing by the maximum absolute value before computing the norm.
@@ -64,7 +64,9 @@ def _numerically_stable_norm2(x: Tensor, y: Tensor) -> Tensor:
         nonzero_mask, min_val / max_val, torch.zeros_like(min_val)
     )
     result = torch.where(
-        nonzero_mask, max_val * torch.sqrt(1.0 + min_max_ratio * min_max_ratio), result
+        nonzero_mask,
+        max_val * torch.sqrt(1.0 + min_max_ratio * min_max_ratio),
+        result,
     )
 
     # Postconditions
@@ -79,16 +81,14 @@ def _numerically_stable_norm2(x: Tensor, y: Tensor) -> Tensor:
 
 
 class PolynomialProxy(ABC):
-    """
-    Base class for polynomial evaluation with type dispatch.
+    """Base class for polynomial evaluation with type dispatch.
 
     Matches the CUDA PolynomialProxy template struct pattern.
     Subclasses implement specific polynomial types (full, even, odd).
     """
 
     def __init__(self, coeffs: Tensor):
-        """
-        Initialize polynomial proxy.
+        """Initialize polynomial proxy.
 
         Args:
             coeffs: [..., B, N] Tensor of polynomial coefficients where N is the number of coefficients.
@@ -97,8 +97,7 @@ class PolynomialProxy(ABC):
 
     @abstractmethod
     def eval_horner(self, x: Tensor) -> Tensor:
-        """
-        Evaluate polynomial at x using Horner's method.
+        """Evaluate polynomial at x using Horner's method.
 
         Broadcasting behavior follows these rules:
             coeffs [B, N] + x [..., B, M] -> [..., B, M]
@@ -119,9 +118,7 @@ class PolynomialProxy(ABC):
 
 
 class FullPolynomialProxy(PolynomialProxy):
-    """
-    Full polynomial: y = c₀ + c₁·x + c₂·x² + c₃·x³ + ...
-    """
+    """Full polynomial: y = c₀ + c₁·x + c₂·x² + c₃·x³ + ..."""
 
     def eval_horner(self, x: Tensor) -> Tensor:
         # Preconditions
@@ -144,15 +141,13 @@ class FullPolynomialProxy(PolynomialProxy):
 
 
 class OddPolynomialProxy(PolynomialProxy):
-    """
-    Odd-only polynomial: y = c₀·x + c₁·x³ + c₂·x⁵ + c₃·x⁷ + ...
+    """Odd-only polynomial: y = c₀·x + c₁·x³ + c₂·x⁵ + c₃·x⁷ + ...
 
     Matches CUDA PolynomialProxy<PolynomialType::ODD, N>
     """
 
     def eval_horner(self, x: Tensor) -> Tensor:
-        """
-        Evaluate odd-only polynomial using Horner's method.
+        """Evaluate odd-only polynomial using Horner's method.
 
         Factors out one x term and evaluates the x²-based polynomial.
 
@@ -174,14 +169,14 @@ class OddPolynomialProxy(PolynomialProxy):
 
 
 class EvenPolynomialProxy(PolynomialProxy):
-    """
-    Even-only polynomial: y = c₀ + c₁·x² + c₂·x⁴ + c₃·x⁶ + ...
-    Matches CUDA PolynomialProxy<PolynomialType::EVEN, N>
+    """Even-only polynomial: y = c₀ + c₁·x² + c₂·x⁴ + c₃·x⁶ + ...
+
+    Matches CUDA PolynomialProxy<PolynomialType::EVEN, N>.
     """
 
     def eval_horner(self, x: Tensor) -> Tensor:
-        """
-        Evaluate even-only polynomial using Horner's method.
+        """Evaluate even-only polynomial using Horner's method.
+
         Substitutes x² for x in standard Horner evaluation.
 
         Args:
@@ -206,9 +201,8 @@ def _eval_poly_inverse_horner_newton(
     inv_poly_approx: PolynomialProxy,
     y: Tensor,  # [..., M]
     n_iterations: int,
-) -> Tuple[Tensor, Tensor]:
-    """
-    Evaluate inverse polynomial x = f⁻¹(y) using Newton's method.
+) -> tuple[Tensor, Tensor]:
+    """Evaluate inverse polynomial x = f⁻¹(y) using Newton's method.
 
     Given a polynomial y = f(x), finds x such that f(x) = y using:
     1. Initial approximation from inv_poly_approx
@@ -278,8 +272,7 @@ def _eval_poly_inverse_horner_newton(
 
 
 class SafeNormalize(torch.autograd.Function):
-    """
-    Safe normalize with custom backward matching CUDA implementation.
+    """Safe normalize with custom backward matching CUDA implementation.
 
     Forward: normalized = v / ||v|| if ||v|| > 0 else v
     Backward: grad_v = (1/||v||) * grad_out - (1/||v||^3) * dot(grad_out, v) * v
@@ -288,8 +281,10 @@ class SafeNormalize(torch.autograd.Function):
 
     @staticmethod
     def forward(ctx, v: Tensor, dim: int = -1, keepdim: bool = False) -> Tensor:
-        """
+        """Normalize tensor v along the given dimension.
+
         Args:
+            ctx: Autograd context.
             v: Input tensor to normalize
             dim: Dimension along which to compute the norm
             keepdim: Whether to keep the normalized dimension
@@ -318,9 +313,10 @@ class SafeNormalize(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_output: Tensor) -> tuple:
-        """
-        Implements: grad_v = (1/||v||) * grad_out - (1/||v||^3) * dot(grad_out, v) * v
-                    or grad_v = grad_out if ||v|| == 0
+        """Compute gradient for normalize operation.
+
+        Implements: grad_v = (1/||v||) * grad_out - (1/||v||^3) * dot(grad_out, v) * v,
+        or grad_v = grad_out if ||v|| == 0.
         """
         v, norm_sq, inv_norm = ctx.saved_tensors
         dim = ctx.dim
@@ -339,7 +335,9 @@ class SafeNormalize(torch.autograd.Function):
         il = inv_norm
 
         # il3 = 1/(||v||^3) = (1/||v||) * (1/||v||^2)
-        il3 = torch.where(norm_sq > 0.0, inv_norm / norm_sq, torch.zeros_like(inv_norm))
+        il3 = torch.where(
+            norm_sq > 0.0, inv_norm / norm_sq, torch.zeros_like(inv_norm)
+        )
 
         # dot(grad_out, v)
         dot_product = (grad_output * v).sum(dim=dim, keepdim=True)
@@ -357,8 +355,7 @@ def _safe_normalize(
     dim: int = -1,
     keepdim: bool = False,
 ) -> Tensor:
-    """
-    Safely normalize a vector, returning zero vector if input norm is zero.
+    """Safely normalize a vector, returning zero vector if input norm is zero.
 
     Uses custom backward pass that matches CUDA implementation.
 
@@ -388,7 +385,9 @@ def _rotmat_to_quat(R: Tensor) -> Tensor:
     fourXSquaredMinus1 = R_flat[:, 0, 0] - R_flat[:, 1, 1] - R_flat[:, 2, 2]
     fourYSquaredMinus1 = R_flat[:, 1, 1] - R_flat[:, 0, 0] - R_flat[:, 2, 2]
     fourZSquaredMinus1 = R_flat[:, 2, 2] - R_flat[:, 0, 0] - R_flat[:, 1, 1]
-    fourWSquaredMinus1 = R_flat[:, 0, 0] + R_flat[:, 1, 1] + R_flat[:, 2, 2]  # trace
+    fourWSquaredMinus1 = (
+        R_flat[:, 0, 0] + R_flat[:, 1, 1] + R_flat[:, 2, 2]
+    )  # trace
 
     # Find largest component
     fourBiggestSquaredMinus1 = torch.stack(
@@ -405,7 +404,9 @@ def _rotmat_to_quat(R: Tensor) -> Tensor:
     # Compute largest component value and multiplier
     biggestVal = (
         torch.sqrt(
-            fourBiggestSquaredMinus1.gather(1, biggestIndex.unsqueeze(1)).squeeze(1)
+            fourBiggestSquaredMinus1.gather(
+                1, biggestIndex.unsqueeze(1)
+            ).squeeze(1)
             + 1.0
         )
         * 0.5
@@ -465,7 +466,9 @@ def _quat_normalize_rotation(q: Tensor, dim: int = -1) -> Tensor:
     ones = torch.ones_like(result.select(dim, 0))
     zeros = torch.zeros_like(result.select(dim, 0))
     identity = torch.stack([ones, zeros, zeros, zeros], dim=dim)
-    result = torch.where(torch.all(q == 0, dim=dim, keepdim=True), identity, result)
+    result = torch.where(
+        torch.all(q == 0, dim=dim, keepdim=True), identity, result
+    )
 
     # Make "double-cover" into "single-cover": if w < 0, negate the quaternion
     w_negative = (result.select(dim, 0) < 0).unsqueeze(dim)
@@ -555,7 +558,6 @@ def _quat_multiply(q1: Tensor, q2: Tensor, dim: int = -1) -> Tensor:
     Returns:
         Product q1 * q2 as quaternion with 4 components along 'dim'
     """
-
     # Preconditions
     dim = dim + q1.ndim if dim < 0 else dim
     A = q1.shape[:dim]
@@ -637,7 +639,7 @@ def _quat_slerp(x: Tensor, y: Tensor, t: Tensor) -> Tensor:
 
 
 def _quat_scale_to_preci_half(quats: Tensor, scales: Tensor) -> Tensor:
-    """Compute M = R * (1/scales)"""
+    """Compute M = R * (1/scales)."""
     R = _quat_to_rotmat(quats)
     M = R * (1.0 / scales[..., None, :])
     return M
@@ -683,7 +685,7 @@ def _quat_scale_to_covar_preci(
     compute_covar: bool = True,
     compute_preci: bool = True,
     triu: bool = False,
-) -> Tuple[Optional[Tensor], Optional[Tensor]]:
+) -> tuple[Tensor | None, Tensor | None]:
     """PyTorch implementation of `gsplat.cuda._wrapper.quat_scale_to_covar_preci()`."""
     batch_dims = quats.shape[:-1]
     assert quats.shape == batch_dims + (4,), quats.shape
@@ -696,7 +698,8 @@ def _quat_scale_to_covar_preci(
         if triu:
             covars = covars.reshape(batch_dims + (9,))  # [..., 9]
             covars = (
-                covars[..., [0, 1, 2, 4, 5, 8]] + covars[..., [0, 3, 6, 4, 7, 8]]
+                covars[..., [0, 1, 2, 4, 5, 8]]
+                + covars[..., [0, 3, 6, 4, 7, 8]]
             ) / 2.0  # [..., 6]
     if compute_preci:
         P = R * (1 / scales[..., None, :])  # [..., 3, 3]
@@ -704,7 +707,8 @@ def _quat_scale_to_covar_preci(
         if triu:
             precis = precis.reshape(batch_dims + (9,))  # [..., 9]
             precis = (
-                precis[..., [0, 1, 2, 4, 5, 8]] + precis[..., [0, 3, 6, 4, 7, 8]]
+                precis[..., [0, 1, 2, 4, 5, 8]]
+                + precis[..., [0, 3, 6, 4, 7, 8]]
             ) / 2.0  # [..., 6]
 
     return covars if compute_covar else None, precis if compute_preci else None
@@ -715,9 +719,10 @@ def _quat_scale_to_covar_preci(
 # ============================================================================
 
 
-def compute_inverse_polynomial(forward_poly_coeffs, input_range, num_samples=1000):
-    """
-    Compute the inverse polynomial coefficients using least squares fitting.
+def compute_inverse_polynomial(
+    forward_poly_coeffs, input_range, num_samples=1000
+):
+    """Compute the inverse polynomial coefficients using least squares fitting.
 
     Given a polynomial f(x) = c0 + c1*x + c2*x^2 + ... + c5*x^5,
     compute g(y) such that g(f(x)) ≈ x using least squares fitting.
@@ -746,7 +751,9 @@ def compute_inverse_polynomial(forward_poly_coeffs, input_range, num_samples=100
 
     # Check for numerical issues
     if np.any(np.isnan(y_samples)) or np.any(np.isinf(y_samples)):
-        raise ValueError("Forward polynomial evaluation produced NaN or Inf values")
+        raise ValueError(
+            "Forward polynomial evaluation produced NaN or Inf values"
+        )
 
     # Fit inverse: x = g(y) with constraint k0=0
     # Build design matrix [y, y^2, y^3, y^4, y^5] (no constant term)
