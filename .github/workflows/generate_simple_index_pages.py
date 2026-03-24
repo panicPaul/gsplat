@@ -13,20 +13,40 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Generate PEP 503-style index pages for released Python wheels."""
+
 import argparse
-import os
 import re
+from pathlib import Path
+from typing import TypedDict
 
 import requests
 from jinja2 import Template
 
-# Automatically get the repository name in the format "owner/repo" from the GitHub workflow environment
-GITHUB_REPO = os.getenv("GITHUB_REPOSITORY")
+
+class WheelInfo(TypedDict):
+    """Metadata for a released Python wheel."""
+
+    release_name: str
+    wheel_name: str
+    download_url: str
+    package_name: str
+    local_version: str | None
 
 
-def list_python_wheels():
-    # GitHub API URL for releases
-    releases_url = f"https://api.github.com/repos/{GITHUB_REPO}/releases"
+def _github_repo() -> str:
+    """Return the GitHub repository in `owner/repo` form."""
+    import os
+
+    repo = os.getenv("GITHUB_REPOSITORY")
+    if repo is None:
+        raise RuntimeError("GITHUB_REPOSITORY is not set")
+    return repo
+
+
+def list_python_wheels() -> list[WheelInfo]:
+    """Fetch all released wheel assets from the GitHub releases API."""
+    releases_url = f"https://api.github.com/repos/{_github_repo()}/releases"
 
     response = requests.get(releases_url)
 
@@ -37,7 +57,7 @@ def list_python_wheels():
 
     releases = response.json()
 
-    wheel_files = []
+    wheel_files: list[WheelInfo] = []
 
     # Iterate through releases and assets
     for release in releases:
@@ -72,8 +92,8 @@ def list_python_wheels():
     return wheel_files
 
 
-def generate_simple_index_htmls(wheels, outdir):
-    # Jinja2 template as a string
+def generate_simple_index_htmls(wheels: list[WheelInfo], outdir: Path) -> None:
+    """Write simple index pages for all wheels and package groups."""
     template_versions_str = """
     <!DOCTYPE html>
     <html>
@@ -104,7 +124,7 @@ def generate_simple_index_htmls(wheels, outdir):
     template_packages = Template(template_packages_str)
 
     # group the wheels by package name
-    packages = {}
+    packages: dict[str, list[WheelInfo]] = {}
     for wheel in wheels:
         package_name = wheel["package_name"]
         if package_name not in packages:
@@ -115,23 +135,23 @@ def generate_simple_index_htmls(wheels, outdir):
     html_content = template_packages.render(
         package_names=[str(k) for k in packages]
     )
-    os.makedirs(outdir, exist_ok=True)
-    with open(os.path.join(outdir, "index.html"), "w") as file:
+    outdir.mkdir(parents=True, exist_ok=True)
+    with (outdir / "index.html").open("w") as file:
         file.write(html_content)
 
     # for each package, render the HTML to list the wheels
     for package_name, wheels in packages.items():
         html_page = template_versions.render(
-            repo_name=GITHUB_REPO, wheels=wheels
+            repo_name=_github_repo(), wheels=wheels
         )
-        os.makedirs(os.path.join(outdir, package_name), exist_ok=True)
-        with open(
-            os.path.join(outdir, package_name, "index.html"), "w"
-        ) as file:
+        package_dir = outdir / package_name
+        package_dir.mkdir(parents=True, exist_ok=True)
+        with (package_dir / "index.html").open("w") as file:
             file.write(html_page)
 
 
-def generate_all_pages():
+def generate_all_pages(outdir: Path) -> None:
+    """Generate the root index and per-local-version sub-indexes."""
     wheels = list_python_wheels()
     if wheels:
         print("Python Wheels found in releases:")
@@ -143,25 +163,23 @@ def generate_all_pages():
         print("No Python wheels found in the releases.")
 
     # Generate Simple Index HTML pages the wheel with all local versions
-    generate_simple_index_htmls(wheels, outdir=args.outdir)
+    generate_simple_index_htmls(wheels, outdir=outdir)
 
     # group wheels per local version
-    wheels_per_local_version = {}
+    wheels_per_local_version: dict[str, list[WheelInfo]] = {}
     for wheel in wheels:
         local_version = wheel["local_version"]
-        if (
-            local_version is not None
-            and local_version not in wheels_per_local_version
-        ):
+        if local_version is None:
+            continue
+        if local_version not in wheels_per_local_version:
             wheels_per_local_version[local_version] = []
         wheels_per_local_version[local_version].append(wheel)
 
     # create a subdirectory for each local version
     for local_version, wheels in wheels_per_local_version.items():
-        os.makedirs(os.path.join(args.outdir, local_version), exist_ok=True)
-        generate_simple_index_htmls(
-            wheels, outdir=os.path.join(args.outdir, local_version)
-        )
+        version_outdir = outdir / local_version
+        version_outdir.mkdir(parents=True, exist_ok=True)
+        generate_simple_index_htmls(wheels, outdir=version_outdir)
 
 
 if __name__ == "__main__":
@@ -172,4 +190,4 @@ if __name__ == "__main__":
         "--outdir", help="Output directory for the index pages", default="."
     )
     args = argparser.parse_args()
-    generate_all_pages()
+    generate_all_pages(Path(args.outdir))

@@ -36,10 +36,10 @@ def sort_splats(
     """
     try:
         from plas import sort_with_plas
-    except:
+    except ImportError as err:
         raise ImportError(
             "Please install PLAS with 'pip install git+https://github.com/fraunhoferhhi/PLAS.git' to use sorting"
-        )
+        ) from err
 
     n_gs = len(splats["means"])
     n_sidelen = int(n_gs**0.5)

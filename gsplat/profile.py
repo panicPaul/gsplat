@@ -17,8 +17,10 @@
 
 import os
 import time
+import types
 from collections.abc import Callable
 from functools import wraps
+from typing import Any
 
 import torch
 
@@ -46,19 +48,25 @@ class timeit:
     ```
     """
 
-    def __init__(self, name: str = "unnamed"):
+    def __init__(self, name: str = "unnamed") -> None:
         """Initialize the profiler with the given name."""
         self.name = name
         self.start_time: float | None = None
         self.enabled = os.environ.get("TIMEIT", "0") == "1"
 
-    def __enter__(self):
+    def __enter__(self) -> "timeit":
         """Start timing."""
         if self.enabled:
             torch.cuda.synchronize()
             self.start_time = time.perf_counter()
+        return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: types.TracebackType | None,
+    ) -> None:
         """Stop timing and record elapsed time."""
         if self.enabled:
             torch.cuda.synchronize()
@@ -73,7 +81,7 @@ class timeit:
         """Use as a decorator to time function calls."""
 
         @wraps(f)
-        def decorated(*args, **kwargs):
+        def decorated(*args: Any, **kwargs: Any) -> Any:
             with self:
                 self.name = f.__name__
                 return f(*args, **kwargs)

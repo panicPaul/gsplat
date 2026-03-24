@@ -13,8 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Simple image fitting example using 3D or 2D Gaussian Splatting."""
+
 import math
-import os
 import time
 from pathlib import Path
 from typing import Literal
@@ -34,7 +35,8 @@ class SimpleTrainer:
         self,
         gt_image: Tensor,
         num_points: int = 2000,
-    ):
+    ) -> None:
+        """Initialize the trainer with a ground-truth image."""
         self.device = torch.device("cuda:0")
         self.gt_image = gt_image.to(device=self.device)
         self.num_points = num_points
@@ -46,8 +48,8 @@ class SimpleTrainer:
 
         self._init_gaussians()
 
-    def _init_gaussians(self):
-        """Random gaussians"""
+    def _init_gaussians(self) -> None:
+        """Random gaussians."""
         bd = 2
 
         self.means = bd * (
@@ -96,7 +98,8 @@ class SimpleTrainer:
         lr: float = 0.01,
         save_imgs: bool = False,
         model_type: Literal["3dgs", "2dgs"] = "3dgs",
-    ):
+    ) -> None:
+        """Run the training loop."""
         optimizer = optim.Adam(
             [self.rgbs, self.means, self.scales, self.opacities, self.quats], lr
         )
@@ -151,10 +154,10 @@ class SimpleTrainer:
         if save_imgs:
             # save them as a gif with PIL
             frames = [Image.fromarray(frame) for frame in frames]
-            out_dir = os.path.join(os.getcwd(), "results")
-            os.makedirs(out_dir, exist_ok=True)
+            out_dir = Path.cwd() / "results"
+            out_dir.mkdir(parents=True, exist_ok=True)
             frames[0].save(
-                f"{out_dir}/training.gif",
+                out_dir / "training.gif",
                 save_all=True,
                 append_images=frames[1:],
                 optimize=False,
@@ -169,7 +172,8 @@ class SimpleTrainer:
         )
 
 
-def image_path_to_tensor(image_path: Path):
+def image_path_to_tensor(image_path: Path) -> Tensor:
+    """Load an image from disk and convert it to a float tensor."""
     import torchvision.transforms as transforms
 
     img = Image.open(image_path)
@@ -188,6 +192,7 @@ def main(
     lr: float = 0.01,
     model_type: Literal["3dgs", "2dgs"] = "3dgs",
 ) -> None:
+    """Run image fitting with Gaussian Splatting."""
     if img_path:
         gt_image = image_path_to_tensor(img_path)
     else:

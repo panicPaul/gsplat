@@ -13,15 +13,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Utility functions for normalizing camera poses and point clouds."""
+
 import numpy as np
 
 
-def similarity_from_cameras(c2w, strict_scaling=False, center_method="focus"):
-    """reference: nerf-factory
-    Get a similarity transform to normalize dataset
-    from c2w (OpenCV convention) cameras
-    :param c2w: (N, 4)
-    :return T (4,4) , scale (float)
+def similarity_from_cameras(
+    c2w: np.ndarray,
+    strict_scaling: bool = False,
+    center_method: str = "focus",
+) -> np.ndarray:
+    """Get a similarity transform to normalize dataset from c2w cameras.
+
+    Reference: nerf-factory. Cameras use OpenCV convention.
+
+    Args:
+        c2w: (N, 4, 4) camera-to-world matrices.
+        strict_scaling: If True, use max instead of median for scaling.
+        center_method: Method for centering, either "focus" or "poses".
+
+    Returns:
+        T: (4, 4) similarity transform matrix.
     """
     t = c2w[:, :3, 3]
     R = c2w[:, :3, :3]
@@ -77,7 +89,12 @@ def similarity_from_cameras(c2w, strict_scaling=False, center_method="focus"):
     return transform
 
 
-def align_principal_axes(point_cloud):
+def align_principal_axes(point_cloud: np.ndarray) -> np.ndarray:
+    """Align the principal axes of a point cloud via PCA.
+
+    Returns:
+        (4, 4) SE(3) transformation matrix aligning the point cloud.
+    """
     # Compute centroid
     centroid = np.median(point_cloud, axis=0)
 
@@ -111,7 +128,7 @@ def align_principal_axes(point_cloud):
     return transform
 
 
-def transform_points(matrix, points):
+def transform_points(matrix: np.ndarray, points: np.ndarray) -> np.ndarray:
     """Transform points using an SE(3) matrix.
 
     Args:
@@ -126,7 +143,9 @@ def transform_points(matrix, points):
     return points @ matrix[:3, :3].T + matrix[:3, 3]
 
 
-def transform_cameras(matrix, camtoworlds):
+def transform_cameras(
+    matrix: np.ndarray, camtoworlds: np.ndarray
+) -> np.ndarray:
     """Transform cameras using an SE(3) matrix.
 
     Args:
@@ -144,7 +163,10 @@ def transform_cameras(matrix, camtoworlds):
     return camtoworlds
 
 
-def normalize(camtoworlds, points=None):
+def normalize(
+    camtoworlds: np.ndarray, points: np.ndarray | None = None
+) -> tuple[np.ndarray, np.ndarray] | tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Normalize camera poses and optionally a point cloud."""
     T1 = similarity_from_cameras(camtoworlds)
     camtoworlds = transform_cameras(T1, camtoworlds)
     if points is not None:

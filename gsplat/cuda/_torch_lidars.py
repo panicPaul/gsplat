@@ -44,7 +44,7 @@ class _LidarModel:
     def __init__(self, params: LidarModelParameters) -> None:
         self.params = params
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str) -> object:
         params = object.__getattribute__(self, "params")
         if hasattr(params, name):
             return getattr(params, name)
@@ -78,8 +78,8 @@ class _SpinningLidarModel(_LidarModel):
 
     def relative_angle(
         self,
-        angle_ref,
-        angle,
+        angle_ref: float,
+        angle: float,
         spinning_direction: SpinningDirection,
         *,
         scale: float = 1,
@@ -91,7 +91,7 @@ class _SpinningLidarModel(_LidarModel):
         return rel_angle % period
 
     def angle_range_wrap_around(
-        self, start_angle, end_angle, *, scale: float = 1
+        self, start_angle: float, end_angle: float, *, scale: float = 1
     ) -> bool:
         return torch.abs(end_angle - start_angle) >= scale * 2 * math.pi
 
@@ -156,7 +156,7 @@ class _RowOffsetStructuredSpinningLidarModel(_StructuredSpinningLidarModel):
 
     def __init__(
         self, params: RowOffsetStructuredSpinningLidarModelParametersExt
-    ):
+    ) -> None:
         params = copy.copy(params)
 
         # Force using our reference fov
@@ -190,8 +190,11 @@ class _RowOffsetStructuredSpinningLidarModel(_StructuredSpinningLidarModel):
         )
 
     def relative_clock_rotation(
-        self, angle_ref, angle, spinning_direction: SpinningDirection
-    ):
+        self,
+        angle_ref: float,
+        angle: float,
+        spinning_direction: SpinningDirection,
+    ) -> float:
         if spinning_direction == SpinningDirection.CLOCKWISE:
             # Clockwise: going from ref to angle in CW direction
             return angle_ref - angle

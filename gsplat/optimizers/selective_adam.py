@@ -17,7 +17,7 @@
 
 import torch
 
-from ..cuda._wrapper import adam
+from gsplat.cuda._wrapper import adam
 
 
 class SelectiveAdam(torch.optim.Adam):
@@ -55,12 +55,14 @@ class SelectiveAdam(torch.optim.Adam):
 
     """
 
-    def __init__(self, params, eps, betas):
+    def __init__(
+        self, params: list, eps: float, betas: tuple[float, float]
+    ) -> None:
         """Initialize SelectiveAdam optimizer."""
         super().__init__(params=params, eps=eps, betas=betas)
 
     @torch.no_grad()
-    def step(self, visibility):
+    def step(self, visibility: torch.Tensor) -> None:  # type: ignore[override]
         """Perform a single optimization step with selective updates."""
         N = visibility.numel()
         for group in self.param_groups:

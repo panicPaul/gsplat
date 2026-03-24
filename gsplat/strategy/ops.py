@@ -53,7 +53,8 @@ def _multinomial_sample(
     # Fallback to numpy.random.choice for larger element spaces
     weights = weights / weights.sum()
     weights_np = weights.detach().cpu().numpy()
-    sampled_idxs_np = np.random.choice(
+    rng = np.random.default_rng()
+    sampled_idxs_np = rng.choice(
         num_elements, size=n, p=weights_np, replace=replacement
     )
     sampled_idxs = torch.from_numpy(sampled_idxs_np)
@@ -69,7 +70,7 @@ def _update_param_with_optimizer(
     params: dict[str, torch.nn.Parameter] | torch.nn.ParameterDict,
     optimizers: dict[str, torch.optim.Optimizer],
     names: list[str] | None = None,
-):
+) -> None:
     """Update the parameters and the state in the optimizers with defined functions.
 
     Args:
@@ -113,7 +114,7 @@ def duplicate(
     optimizers: dict[str, torch.optim.Optimizer],
     state: dict[str, Tensor],
     mask: Tensor,
-):
+) -> None:
     """Inplace duplicate the Gaussian with the given mask.
 
     Args:
@@ -150,7 +151,7 @@ def split(
     state: dict[str, Tensor],
     mask: Tensor,
     revised_opacity: bool = False,
-):
+) -> None:
     """Inplace split the Gaussian with the given mask.
 
     Args:
@@ -210,7 +211,7 @@ def remove(
     optimizers: dict[str, torch.optim.Optimizer],
     state: dict[str, Tensor],
     mask: Tensor,
-):
+) -> None:
     """Inplace remove the Gaussian with the given mask.
 
     Args:
@@ -241,7 +242,7 @@ def reset_opa(
     optimizers: dict[str, torch.optim.Optimizer],
     state: dict[str, Tensor],
     value: float,
-):
+) -> None:
     """Inplace reset the opacities to the given post-sigmoid value.
 
     Args:
@@ -276,7 +277,7 @@ def relocate(
     mask: Tensor,
     binoms: Tensor,
     min_opacity: float = 0.005,
-):
+) -> None:
     """Inplace relocate some dead Gaussians to the lives ones.
 
     Args:
@@ -335,7 +336,7 @@ def sample_add(
     n: int,
     binoms: Tensor,
     min_opacity: float = 0.005,
-):
+) -> None:
     """Sample n new Gaussians proportional to opacity and add them to the scene."""
     opacities = torch.sigmoid(params["opacities"])
 
@@ -377,7 +378,7 @@ def inject_noise_to_position(
     optimizers: dict[str, torch.optim.Optimizer],
     state: dict[str, Tensor],
     scaler: float,
-):
+) -> None:
     """Inject noise scaled by opacity and covariance to Gaussian positions."""
     opacities = torch.sigmoid(params["opacities"].flatten())
     scales = torch.exp(params["scales"])
@@ -389,7 +390,7 @@ def inject_noise_to_position(
         triu=False,
     )
 
-    def op_sigmoid(x, k=100, x0=0.995):
+    def op_sigmoid(x: Tensor, k: float = 100, x0: float = 0.995) -> Tensor:
         return 1 / (1 + torch.exp(-k * (x - x0)))
 
     noise = (

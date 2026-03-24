@@ -14,14 +14,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Build configuration for the gsplat package."""
+
 import os
+from pathlib import Path
 
 from setuptools import setup
 
 BUILD_NO_CUDA = os.getenv("BUILD_NO_CUDA", "0") == "1"
 
 
-def get_ext():
+def get_ext() -> type:
+    """Return the custom build extension class."""
     from torch.utils.cpp_extension import BuildExtension
 
     ext = BuildExtension.with_options(no_python_abi_suffix=True, use_ninja=True)
@@ -29,16 +33,17 @@ def get_ext():
     # Use a persistent build directory so ninja can cache object files across
     # installs (e.g. pixi install after adding a dependency).
     class PersistentBuildExt(ext):
-        def initialize_options(self):
+        def initialize_options(self) -> None:
             super().initialize_options()
-            self.build_temp = os.path.join(
-                os.path.dirname(os.path.abspath(__file__)), "build", "temp"
+            self.build_temp = str(
+                Path(__file__).resolve().parent / "build" / "temp"
             )
 
     return PersistentBuildExt
 
 
-def get_extensions():
+def get_extensions() -> list[object]:
+    """Return the CUDA extension modules for package builds."""
     # Use the same build parameters as the JIT build. However, directly
     # importing the gsplat.cuda.build module would trigger a circular
     # dependency where gsplat is imported before it is built. To avoid
@@ -49,14 +54,14 @@ def get_extensions():
     from torch.utils.cpp_extension import CUDAExtension
 
     spec = importlib.util.spec_from_file_location(
-        "gsplat_cuda_build", os.path.join("gsplat", "cuda", "build.py")
+        "gsplat_cuda_build", Path("gsplat") / "cuda" / "build.py"
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     params = module.get_build_parameters()
 
-    setup_dir = os.path.dirname(os.path.abspath(__file__))
-    sources = [os.path.relpath(s, setup_dir) for s in params.sources]
+    setup_dir = Path(__file__).resolve().parent
+    sources = [str(Path(s).relative_to(setup_dir)) for s in params.sources]
 
     extension = CUDAExtension(
         "gsplat.csrc",

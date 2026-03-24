@@ -21,6 +21,7 @@ pytest <THIS_PY_FILE>
 ```
 """
 
+import argparse
 import time
 from collections.abc import Callable
 from typing import Literal
@@ -40,7 +41,10 @@ RESOLUTIONS = {
 device = torch.device("cuda")
 
 
-def timeit(repeats: int, f: Callable, *args, **kwargs) -> float:
+def timeit(
+    repeats: int, f: Callable[..., object], *args: object, **kwargs: object
+) -> tuple[float, object]:
+    """Measure average runtime for a callable and return its last result."""
     for _ in range(5):  # warmup
         f(*args, **kwargs)
     torch.cuda.synchronize()
@@ -64,7 +68,8 @@ def main(
     memory_history: bool = False,
     world_rank: int = 0,
     world_size: int = 1,
-):
+) -> dict[str, float]:
+    """Profile rasterization memory use and throughput for one configuration."""
     (
         means,
         quats,
@@ -114,7 +119,7 @@ def main(
 
         rasterization_fn = rasterization_inria_wrapper
     else:
-        assert False, f"Backend {backend} is not valid."
+        raise AssertionError(f"Backend {backend} is not valid.")
 
     ellipse_time_fwd, outputs = timeit(
         repeats,
@@ -140,7 +145,7 @@ def main(
     render_colors = outputs[0]
     loss = render_colors.sum()
 
-    def backward():
+    def backward() -> None:
         loss.backward(retain_graph=True)
         for v in [means, quats, scales, opacities, colors]:
             v.grad = None
@@ -166,7 +171,13 @@ def main(
     }
 
 
-def worker(local_rank: int, world_rank: int, world_size: int, args):
+def worker(
+    local_rank: int,
+    world_rank: int,
+    world_size: int,
+    args: argparse.Namespace,
+) -> None:
+    """Run profiling sweeps and print a summary table on rank zero."""
     from tabulate import tabulate
 
     # Tested on a NVIDIA TITAN RTX with (24 GB).

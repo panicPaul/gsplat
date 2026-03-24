@@ -23,9 +23,9 @@ pytest <THIS_PY_FILE> -s
 """
 
 import math
-import os
 import struct
 from itertools import chain, product
+from pathlib import Path
 from types import SimpleNamespace
 from typing import assert_never
 
@@ -86,9 +86,7 @@ def test_data():
         height,
     ) = load_test_data(
         device=device,
-        data_path=os.path.join(
-            os.path.dirname(__file__), "../assets/test_garden.npz"
-        ),
+        data_path=str(Path(__file__).parent / "../assets/test_garden.npz"),
     )
     return {
         "means": means,  # [N, 3]

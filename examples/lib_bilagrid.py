@@ -27,7 +27,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""This is a standalone PyTorch implementation of 3D bilateral grid and CP-decomposed 4D bilateral grid.
+"""Standalone PyTorch implementation of 3D bilateral grid and CP-decomposed 4D bilateral grid.
+
 To use this module, you can download the "lib_bilagrid.py" file and simply put it in your project directory.
 
 For the details, please check our research project: ["Bilateral Guided Radiance Field Processing"](https://bilarfpro.github.io/).
@@ -67,7 +68,9 @@ from torch import nn
 tl.set_backend("pytorch")
 
 
-def bilateral_grid_tv_loss(model, config):
+def bilateral_grid_tv_loss(
+    model: torch.nn.Module, config: object
+) -> torch.Tensor:
     """Computes total variations of bilateral grids."""
     total_loss = 0.0
 
@@ -79,7 +82,9 @@ def bilateral_grid_tv_loss(model, config):
     return total_loss
 
 
-def color_affine_transform(affine_mats, rgb):
+def color_affine_transform(
+    affine_mats: torch.Tensor, rgb: torch.Tensor
+) -> torch.Tensor:
     """Applies color affine transformations.
 
     Args:
@@ -95,11 +100,11 @@ def color_affine_transform(affine_mats, rgb):
     )
 
 
-def _num_tensor_elems(t):
+def _num_tensor_elems(t: torch.Tensor) -> float:
     return max(torch.prod(torch.tensor(t.size()[1:]).float()).item(), 1.0)
 
 
-def total_variation_loss(x):
+def total_variation_loss(x: torch.Tensor) -> torch.Tensor:
     """Returns total variation on multi-dimensional tensors.
 
     Args:
@@ -118,7 +123,12 @@ def total_variation_loss(x):
     return tv / batch_size
 
 
-def slice(bil_grids, xy, rgb, grid_idx):
+def slice(
+    bil_grids: "BilateralGrid",
+    xy: torch.Tensor,
+    rgb: torch.Tensor,
+    grid_idx: torch.Tensor,
+) -> dict:
     """Slices a batch of 3D bilateral grids by pixel coordinates `xy` and gray-scale guidances of pixel colors `rgb`.
 
     Supports 2-D, 3-D, and 4-D input shapes. The first dimension of the input is the batch size
@@ -190,12 +200,20 @@ class BilateralGrid(nn.Module):
     Holds one or more than one bilateral grids.
     """
 
-    def __init__(self, num, grid_X=16, grid_Y=16, grid_W=8):
-        """Args:
-        num (int): The number of bilateral grids (i.e., the number of views).
-        grid_X (int): Defines grid width $W$.
-        grid_Y (int): Defines grid height $H$.
-        grid_W (int): Defines grid guidance dimension $L$.
+    def __init__(
+        self,
+        num: int,
+        grid_X: int = 16,
+        grid_Y: int = 16,
+        grid_W: int = 8,
+    ) -> None:
+        """Initialize the bilateral grid.
+
+        Args:
+            num: The number of bilateral grids (i.e., the number of views).
+            grid_X: Defines grid width $W$.
+            grid_Y: Defines grid height $H$.
+            grid_W: Defines grid guidance dimension $L$.
         """
         super().__init__()
 
@@ -220,7 +238,7 @@ class BilateralGrid(nn.Module):
         self.rgb2gray = lambda rgb: (rgb @ self.rgb2gray_weight.T) * 2.0 - 1.0
         """ A function that converts RGB to gray-scale guidance in $[-1, 1]$."""
 
-    def _init_identity_grid(self):
+    def _init_identity_grid(self) -> torch.Tensor:
         grid = torch.tensor(
             [
                 1.0,
@@ -246,12 +264,18 @@ class BilateralGrid(nn.Module):
         grid = grid.permute(0, 4, 1, 2, 3)  # (1, 12, L, H, W)
         return grid
 
-    def tv_loss(self):
+    def tv_loss(self) -> torch.Tensor:
         """Computes and returns total variation loss on the bilateral grids."""
         return total_variation_loss(self.grids)
 
-    def forward(self, grid_xy, rgb, idx=None):
+    def forward(
+        self,
+        grid_xy: torch.Tensor,
+        rgb: torch.Tensor,
+        idx: torch.Tensor | None = None,
+    ) -> torch.Tensor:
         """Bilateral grid slicing. Supports 2-D, 3-D, 4-D, and 5-D input.
+
         For the 2-D, 3-D, and 4-D cases, please refer to `slice`.
         For the 5-D cases, `idx` will be unused and the first dimension of `xy` should be
         equal to the number of bilateral grids. Then this function becomes PyTorch's
@@ -311,7 +335,11 @@ class BilateralGrid(nn.Module):
         return affine_mats
 
 
-def slice4d(bil_grid4d, xyz, rgb):
+def slice4d(
+    bil_grid4d: "BilateralGridCP4D",
+    xyz: torch.Tensor,
+    rgb: torch.Tensor,
+) -> dict:
     """Slices a 4D bilateral grid by point coordinates `xyz` and gray-scale guidances of radiance colors `rgb`.
 
     Args:
@@ -335,11 +363,11 @@ def slice4d(bil_grid4d, xyz, rgb):
 
 
 class _ScaledTanh(nn.Module):
-    def __init__(self, s=2.0):
+    def __init__(self, s: float = 2.0) -> None:
         super().__init__()
         self.scaler = s
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return torch.tanh(self.scaler * x)
 
 
@@ -348,28 +376,30 @@ class BilateralGridCP4D(nn.Module):
 
     def __init__(
         self,
-        grid_X=16,
-        grid_Y=16,
-        grid_Z=16,
-        grid_W=8,
-        rank=5,
-        learn_gray=True,
-        gray_mlp_width=8,
-        gray_mlp_depth=2,
-        init_noise_scale=1e-6,
-        bound=2.0,
-    ):
-        """Args:
-        grid_X (int): Defines grid width.
-        grid_Y (int): Defines grid height.
-        grid_Z (int): Defines grid depth.
-        grid_W (int): Defines grid guidance dimension.
-        rank (int): Rank of the 4D bilateral grid.
-        learn_gray (bool): If True, an MLP will be learned to convert RGB colors to gray-scale guidances.
-        gray_mlp_width (int): The MLP width for learnable guidance.
-        gray_mlp_depth (int): The number of MLP layers for learnable guidance.
-        init_noise_scale (float): The noise scale of the initialized factors.
-        bound (float): The bound of the xyz coordinates.
+        grid_X: int = 16,
+        grid_Y: int = 16,
+        grid_Z: int = 16,
+        grid_W: int = 8,
+        rank: int = 5,
+        learn_gray: bool = True,
+        gray_mlp_width: int = 8,
+        gray_mlp_depth: int = 2,
+        init_noise_scale: float = 1e-6,
+        bound: float = 2.0,
+    ) -> None:
+        """Initialize the low-rank 4D bilateral grid.
+
+        Args:
+            grid_X: Defines grid width.
+            grid_Y: Defines grid height.
+            grid_Z: Defines grid depth.
+            grid_W: Defines grid guidance dimension.
+            rank: Rank of the 4D bilateral grid.
+            learn_gray: If True, an MLP will be learned to convert RGB colors to gray-scale guidances.
+            gray_mlp_width: The MLP width for learnable guidance.
+            gray_mlp_depth: The number of MLP layers for learnable guidance.
+            init_noise_scale: The noise scale of the initialized factors.
+            bound: The bound of the xyz coordinates.
         """
         super().__init__()
 
@@ -402,7 +432,7 @@ class BilateralGridCP4D(nn.Module):
 
         if self.learn_gray:
 
-            def rgb2gray_mlp_linear(layer):
+            def rgb2gray_mlp_linear(layer: int) -> nn.Linear:
                 return nn.Linear(
                     self.gray_mlp_width,
                     self.gray_mlp_width
@@ -410,7 +440,7 @@ class BilateralGridCP4D(nn.Module):
                     else 1,
                 )
 
-            def rgb2gray_mlp_actfn(_):
+            def rgb2gray_mlp_actfn(_: object) -> nn.ReLU:
                 return nn.ReLU(inplace=True)
 
             self.rgb2gray = nn.Sequential(
@@ -436,7 +466,7 @@ class BilateralGridCP4D(nn.Module):
                 (rgb @ self.rgb2gray_weight.T) * 2.0 - 1.0
             )
 
-    def _init_identity_grid(self):
+    def _init_identity_grid(self) -> torch.Tensor:
         grid = torch.tensor(
             [
                 1.0,
@@ -464,7 +494,7 @@ class BilateralGridCP4D(nn.Module):
         )  # (12, grid_W, grid_Z, grid_Y, grid_X)
         return grid
 
-    def _init_cp_factors_parafac(self):
+    def _init_cp_factors_parafac(self) -> None:
         # Initialize identity grids.
         init_grids = self._init_identity_grid()
         # Random noises are added to avoid singularity.
@@ -491,7 +521,7 @@ class BilateralGridCP4D(nn.Module):
             fac_resid = torch.zeros_like(fac)
             self.register_parameter(f"fac_{i}", nn.Parameter(fac_resid))
 
-    def tv_loss(self):
+    def tv_loss(self) -> torch.Tensor:
         """Computes and returns total variation loss on the factors of the low-rank 4D bilateral grids."""
         total_loss = 0
         for i in range(1, self.num_facs):
@@ -500,7 +530,7 @@ class BilateralGridCP4D(nn.Module):
 
         return total_loss
 
-    def forward(self, xyz, rgb):
+    def forward(self, xyz: torch.Tensor, rgb: torch.Tensor) -> torch.Tensor:
         """Low-rank 4D bilateral grid slicing.
 
         Args:

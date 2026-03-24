@@ -34,7 +34,7 @@ class LidarSampleTileIdReturn:
 def lidar_sample_tileid(
     lidar: RowOffsetStructuredSpinningLidarModelParametersExt,
     rel_pix: SphericalUnitCoord,
-    round_fn,
+    round_fn: object,
 ) -> LidarSampleTileIdReturn:
     assert round_fn is torch.floor or round_fn is torch.ceil
 
@@ -349,7 +349,7 @@ def _isect_tiles_lidar(
 
     depths = depths.reshape(-1)
 
-    def kernel(image_id, gauss_id):
+    def kernel(image_id: int, gauss_id: int) -> None:
         index = image_id * N + gauss_id
 
         if not nonzero_extent[index]:

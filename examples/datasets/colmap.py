@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""COLMAP dataset parser and loader for 3D Gaussian Splatting training."""
+
 import json
 import os
 from pathlib import Path
@@ -38,25 +40,28 @@ from .normalize import (
 
 def _get_rel_paths(path_dir: str) -> list[str]:
     """Recursively get relative paths of files in a directory."""
+    root = Path(path_dir)
     paths = []
     for dp, _dn, fn in os.walk(path_dir):
+        dp_path = Path(dp)
         for f in fn:
-            paths.append(os.path.relpath(os.path.join(dp, f), path_dir))
+            paths.append(str((dp_path / f).relative_to(root)))
     return paths
 
 
 def _resize_image_folder(image_dir: str, resized_dir: str, factor: int) -> str:
     """Resize image folder."""
     print(f"Downscaling images by {factor}x from {image_dir} to {resized_dir}.")
-    os.makedirs(resized_dir, exist_ok=True)
+    image_dir_path = Path(image_dir)
+    resized_dir_path = Path(resized_dir)
+    resized_dir_path.mkdir(parents=True, exist_ok=True)
 
     image_files = _get_rel_paths(image_dir)
     for image_file in tqdm(image_files):
-        image_path = os.path.join(image_dir, image_file)
-        resized_path = os.path.join(
-            resized_dir, os.path.splitext(image_file)[0] + ".png"
-        )
-        if os.path.isfile(resized_path):
+        image_path = image_dir_path / image_file
+        image_file_path = Path(image_file)
+        resized_path = resized_dir_path / image_file_path.with_suffix(".png")
+        if resized_path.is_file():
             continue
         image = imageio.imread(image_path)[..., :3]
         resized_size = (
@@ -80,17 +85,19 @@ class Parser:
         normalize: bool = False,
         test_every: int = 8,
         load_exposure: bool = False,
-    ):
+    ) -> None:
+        """Initialize the COLMAP parser."""
         self.data_dir = data_dir
         self.factor = factor
         self.normalize = normalize
         self.test_every = test_every
         self.load_exposure = load_exposure
 
-        colmap_dir = os.path.join(data_dir, "sparse/0/")
-        if not os.path.exists(colmap_dir):
-            colmap_dir = os.path.join(data_dir, "sparse")
-        assert os.path.exists(colmap_dir), (
+        data_dir_path = Path(data_dir)
+        colmap_dir = data_dir_path / "sparse" / "0"
+        if not colmap_dir.exists():
+            colmap_dir = data_dir_path / "sparse"
+        assert colmap_dir.exists(), (
             f"COLMAP directory {colmap_dir} does not exist."
         )
 
@@ -191,15 +198,15 @@ class Parser:
             "spiral_radius_scale": 1.0,
             "no_factor_suffix": False,
         }
-        extconf_file = os.path.join(data_dir, "ext_metadata.json")
-        if os.path.exists(extconf_file):
-            with open(extconf_file) as f:
+        extconf_file = data_dir_path / "ext_metadata.json"
+        if extconf_file.exists():
+            with extconf_file.open() as f:
                 self.extconf.update(json.load(f))
 
         # Load bounds if possible (only used in forward facing scenes).
         self.bounds = np.array([0.01, 1.0])
-        posefile = os.path.join(data_dir, "poses_bounds.npy")
-        if os.path.exists(posefile):
+        posefile = data_dir_path / "poses_bounds.npy"
+        if posefile.exists():
             self.bounds = np.load(posefile)[:, -2:]
 
         # Load images.
@@ -207,24 +214,24 @@ class Parser:
             image_dir_suffix = f"_{factor}"
         else:
             image_dir_suffix = ""
-        colmap_image_dir = os.path.join(data_dir, "images")
-        image_dir = os.path.join(data_dir, "images" + image_dir_suffix)
+        colmap_image_dir = data_dir_path / "images"
+        image_dir = data_dir_path / ("images" + image_dir_suffix)
         for d in [image_dir, colmap_image_dir]:
-            if not os.path.exists(d):
+            if not d.exists():
                 raise ValueError(f"Image folder {d} does not exist.")
 
         # Downsampled images may have different names vs images used for COLMAP,
         # so we need to map between the two sorted lists of files.
-        colmap_files = sorted(_get_rel_paths(colmap_image_dir))
-        image_files = sorted(_get_rel_paths(image_dir))
-        if factor > 1 and os.path.splitext(image_files[0])[1].lower() == ".jpg":
+        colmap_files = sorted(_get_rel_paths(str(colmap_image_dir)))
+        image_files = sorted(_get_rel_paths(str(image_dir)))
+        if factor > 1 and Path(image_files[0]).suffix.lower() == ".jpg":
             image_dir = _resize_image_folder(
-                colmap_image_dir, image_dir + "_png", factor=factor
+                str(colmap_image_dir), f"{image_dir}_png", factor=factor
             )
             image_files = sorted(_get_rel_paths(image_dir))
         colmap_to_image = dict(zip(colmap_files, image_files, strict=False))
         image_paths = [
-            os.path.join(image_dir, colmap_to_image[f]) for f in image_names
+            str(Path(image_dir) / colmap_to_image[f]) for f in image_names
         ]
 
         # 3D points and {image_name -> [point_idx]}
@@ -435,7 +442,8 @@ class Dataset:
         split: str = "train",
         patch_size: int | None = None,
         load_depths: bool = False,
-    ):
+    ) -> None:
+        """Initialize the dataset."""
         self.parser = parser
         self.split = split
         self.patch_size = patch_size
@@ -446,10 +454,12 @@ class Dataset:
         else:
             self.indices = indices[indices % self.parser.test_every == 0]
 
-    def __len__(self):
+    def __len__(self) -> int:
+        """Return the number of samples."""
         return len(self.indices)
 
     def __getitem__(self, item: int) -> dict[str, Any]:
+        """Return a sample by index."""
         index = self.indices[item]
         image = imageio.imread(self.parser.image_paths[index])[..., :3]
         camera_id = self.parser.camera_ids[index]

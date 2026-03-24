@@ -16,9 +16,9 @@
 """PNG-based compression for Gaussian splats using quantization and K-means clustering."""
 
 import json
-import os
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -111,7 +111,7 @@ class PngCompression:
             splats = sort_splats(splats)
 
         meta = {}
-        for param_name in splats.keys():
+        for param_name in splats:
             compress_fn = self._get_compress_fn(param_name)
             kwargs = {
                 "n_sidelen": n_sidelen,
@@ -121,7 +121,7 @@ class PngCompression:
                 compress_dir, param_name, splats[param_name], **kwargs
             )
 
-        with open(os.path.join(compress_dir, "meta.json"), "w") as f:
+        with (Path(compress_dir) / "meta.json").open("w") as f:
             json.dump(meta, f)
 
     def decompress(self, compress_dir: str) -> dict[str, Tensor]:
@@ -133,7 +133,7 @@ class PngCompression:
         Returns:
             Dict[str, Tensor]: decompressed Gaussian splats
         """
-        with open(os.path.join(compress_dir, "meta.json")) as f:
+        with (Path(compress_dir) / "meta.json").open() as f:
             meta = json.load(f)
 
         splats = {}
@@ -157,7 +157,11 @@ def _crop_n_splats(splats: dict[str, Tensor], n_crop: int) -> dict[str, Tensor]:
 
 
 def _compress_png(
-    compress_dir: str, param_name: str, params: Tensor, n_sidelen: int, **kwargs
+    compress_dir: str,
+    param_name: str,
+    params: Tensor,
+    n_sidelen: int,
+    **kwargs: object,
 ) -> dict[str, Any]:
     """Compress parameters with 8-bit quantization and lossless PNG compression.
 
@@ -188,7 +192,7 @@ def _compress_png(
 
     img = (img_norm * (2**8 - 1)).round().astype(np.uint8)
     img = img.squeeze()
-    imageio.imwrite(os.path.join(compress_dir, f"{param_name}.png"), img)
+    imageio.imwrite(str(Path(compress_dir) / f"{param_name}.png"), img)
 
     meta = {
         "shape": list(params.shape),
@@ -218,7 +222,7 @@ def _decompress_png(
         params = torch.zeros(meta["shape"], dtype=getattr(torch, meta["dtype"]))
         return meta
 
-    img = imageio.imread(os.path.join(compress_dir, f"{param_name}.png"))
+    img = imageio.imread(str(Path(compress_dir) / f"{param_name}.png"))
     img_norm = img / (2**8 - 1)
 
     grid_norm = torch.tensor(img_norm)
@@ -232,7 +236,11 @@ def _decompress_png(
 
 
 def _compress_png_16bit(
-    compress_dir: str, param_name: str, params: Tensor, n_sidelen: int, **kwargs
+    compress_dir: str,
+    param_name: str,
+    params: Tensor,
+    n_sidelen: int,
+    **kwargs: object,
 ) -> dict[str, Any]:
     """Compress parameters with 16-bit quantization and PNG compression.
 
@@ -265,11 +273,11 @@ def _compress_png_16bit(
     img_l = img & 0xFF
     img_u = (img >> 8) & 0xFF
     imageio.imwrite(
-        os.path.join(compress_dir, f"{param_name}_l.png"),
+        str(Path(compress_dir) / f"{param_name}_l.png"),
         img_l.astype(np.uint8),
     )
     imageio.imwrite(
-        os.path.join(compress_dir, f"{param_name}_u.png"),
+        str(Path(compress_dir) / f"{param_name}_u.png"),
         img_u.astype(np.uint8),
     )
 
@@ -301,8 +309,8 @@ def _decompress_png_16bit(
         params = torch.zeros(meta["shape"], dtype=getattr(torch, meta["dtype"]))
         return meta
 
-    img_l = imageio.imread(os.path.join(compress_dir, f"{param_name}_l.png"))
-    img_u = imageio.imread(os.path.join(compress_dir, f"{param_name}_u.png"))
+    img_l = imageio.imread(str(Path(compress_dir) / f"{param_name}_l.png"))
+    img_u = imageio.imread(str(Path(compress_dir) / f"{param_name}_u.png"))
     img_u = img_u.astype(np.uint16)
     img = (img_u << 8) + img_l
 
@@ -318,12 +326,12 @@ def _decompress_png_16bit(
 
 
 def _compress_npz(
-    compress_dir: str, param_name: str, params: Tensor, **kwargs
+    compress_dir: str, param_name: str, params: Tensor, **kwargs: object
 ) -> dict[str, Any]:
     """Compress parameters with numpy's NPZ compression."""
     npz_dict = {"arr": params.detach().cpu().numpy()}
-    save_fp = os.path.join(compress_dir, f"{param_name}.npz")
-    os.makedirs(os.path.dirname(save_fp), exist_ok=True)
+    save_fp = Path(compress_dir) / f"{param_name}.npz"
+    save_fp.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(save_fp, **npz_dict)
     meta = {
         "shape": params.shape,
@@ -336,7 +344,7 @@ def _decompress_npz(
     compress_dir: str, param_name: str, meta: dict[str, Any]
 ) -> Tensor:
     """Decompress parameters with numpy's NPZ compression."""
-    arr = np.load(os.path.join(compress_dir, f"{param_name}.npz"))["arr"]
+    arr = np.load(Path(compress_dir) / f"{param_name}.npz")["arr"]
     params = torch.tensor(arr)
     params = params.reshape(meta["shape"])
     params = params.to(dtype=getattr(torch, meta["dtype"]))
@@ -351,7 +359,7 @@ def _compress_kmeans(
     quantization: int = 6,
     eps: float = 1e-6,
     verbose: bool = True,
-    **kwargs,
+    **kwargs: object,
 ) -> dict[str, Any]:
     """Run K-means clustering on parameters and save centroids and labels to a npz file.
 
@@ -373,10 +381,10 @@ def _compress_kmeans(
     """
     try:
         from torchpq.clustering import KMeans
-    except:
+    except ImportError as err:
         raise ImportError(
             "Please install extra dependencies with 'pip install torchpq cupy' to use K-means clustering"
-        )
+        ) from err
 
     if torch.numel == 0:
         meta = {
@@ -406,9 +414,7 @@ def _compress_kmeans(
         "centroids": centroids_quant,
         "labels": labels,
     }
-    np.savez_compressed(
-        os.path.join(compress_dir, f"{param_name}.npz"), **npz_dict
-    )
+    np.savez_compressed(Path(compress_dir) / f"{param_name}.npz", **npz_dict)
     meta = {
         "shape": list(params.shape),
         "dtype": str(params.dtype).split(".")[1],
@@ -420,7 +426,7 @@ def _compress_kmeans(
 
 
 def _decompress_kmeans(
-    compress_dir: str, param_name: str, meta: dict[str, Any], **kwargs
+    compress_dir: str, param_name: str, meta: dict[str, Any], **kwargs: object
 ) -> Tensor:
     """Decompress parameters from K-means compression.
 
@@ -437,7 +443,7 @@ def _decompress_kmeans(
         params = torch.zeros(meta["shape"], dtype=getattr(torch, meta["dtype"]))
         return meta
 
-    npz_dict = np.load(os.path.join(compress_dir, f"{param_name}.npz"))
+    npz_dict = np.load(Path(compress_dir) / f"{param_name}.npz")
     centroids_quant = npz_dict["centroids"]
     labels = npz_dict["labels"]
 

@@ -87,7 +87,7 @@ class PolynomialProxy(ABC):
     Subclasses implement specific polynomial types (full, even, odd).
     """
 
-    def __init__(self, coeffs: Tensor):
+    def __init__(self, coeffs: Tensor) -> None:
         """Initialize polynomial proxy.
 
         Args:
@@ -280,7 +280,12 @@ class SafeNormalize(torch.autograd.Function):
     """
 
     @staticmethod
-    def forward(ctx, v: Tensor, dim: int = -1, keepdim: bool = False) -> Tensor:
+    def forward(
+        ctx: torch.autograd.function.FunctionCtx,
+        v: Tensor,
+        dim: int = -1,
+        keepdim: bool = False,
+    ) -> Tensor:
         """Normalize tensor v along the given dimension.
 
         Args:
@@ -312,7 +317,9 @@ class SafeNormalize(torch.autograd.Function):
         return normalized
 
     @staticmethod
-    def backward(ctx, grad_output: Tensor) -> tuple:
+    def backward(
+        ctx: torch.autograd.function.FunctionCtx, grad_output: Tensor
+    ) -> tuple:
         """Compute gradient for normalize operation.
 
         Implements: grad_v = (1/||v||) * grad_out - (1/||v||^3) * dot(grad_out, v) * v,
@@ -531,8 +538,6 @@ def _quat_rotate(q: Tensor, v: Tensor) -> Tensor:
     q = _safe_normalize(q)
 
     w, x, y, z = torch.unbind(q, dim=-1)  # [..., N]
-    vx, vy, vz = torch.unbind(v, dim=-1)  # [..., N]
-
     # Compute q * (0, v) * q_conjugate using quaternion multiplication formula
     # Result is: v + 2*cross(q.xyz, cross(q.xyz, v) + w*v)
     qvec = torch.stack([x, y, z], dim=-1)  # Imaginary part [..., N, 3]
@@ -720,8 +725,10 @@ def _quat_scale_to_covar_preci(
 
 
 def compute_inverse_polynomial(
-    forward_poly_coeffs, input_range, num_samples=1000
-):
+    forward_poly_coeffs: list[float],
+    input_range: tuple[float, float],
+    num_samples: int = 1000,
+) -> list[float]:
     """Compute the inverse polynomial coefficients using least squares fitting.
 
     Given a polynomial f(x) = c0 + c1*x + c2*x^2 + ... + c5*x^5,

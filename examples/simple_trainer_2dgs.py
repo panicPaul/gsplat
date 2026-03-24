@@ -1,3 +1,5 @@
+"""Training example for 2D Gaussian splatting."""
+
 # SPDX-FileCopyrightText: Copyright 2023-2026 the Regents of the University of California, Nerfstudio Team and contributors. All rights reserved.
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
@@ -16,7 +18,6 @@
 
 import json
 import math
-import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -57,6 +58,8 @@ from utils import (
 
 @dataclass
 class Config:
+    """Configuration for 2DGS training, evaluation, and viewer behavior."""
+
     # Disable viewer
     disable_viewer: bool = False
     # Path to the .pt file. If provide, it will skip training and render a video
@@ -191,7 +194,8 @@ class Config:
     # Save training images to tensorboard
     tb_save_image: bool = False
 
-    def adjust_steps(self, factor: float):
+    def adjust_steps(self, factor: float) -> None:
+        """Scale scheduled training milestones by a common factor."""
         self.eval_steps = [int(i * factor) for i in self.eval_steps]
         self.save_steps = [int(i * factor) for i in self.save_steps]
         self.max_steps = int(self.max_steps * factor)
@@ -216,6 +220,7 @@ def create_splats_with_optimizers(
     feature_dim: int | None = None,
     device: str = "cuda",
 ) -> tuple[torch.nn.ParameterDict, dict[str, torch.optim.Optimizer]]:
+    """Create initial 2DGS parameters and their optimizers."""
     if init_type == "sfm":
         points = torch.from_numpy(parser.points).float()
         rgbs = torch.from_numpy(parser.points_rgb / 255.0).float()
@@ -280,21 +285,22 @@ class Runner:
     """Engine for training and testing."""
 
     def __init__(self, cfg: Config) -> None:
+        """Initialize datasets, model state, metrics, and optional viewer."""
         set_random_seed(42)
 
         self.cfg = cfg
         self.device = "cuda"
 
         # Where to dump results.
-        os.makedirs(cfg.result_dir, exist_ok=True)
+        Path(cfg.result_dir).mkdir(parents=True, exist_ok=True)
 
         # Setup output directories.
         self.ckpt_dir = f"{cfg.result_dir}/ckpts"
-        os.makedirs(self.ckpt_dir, exist_ok=True)
+        Path(self.ckpt_dir).mkdir(parents=True, exist_ok=True)
         self.stats_dir = f"{cfg.result_dir}/stats"
-        os.makedirs(self.stats_dir, exist_ok=True)
+        Path(self.stats_dir).mkdir(parents=True, exist_ok=True)
         self.render_dir = f"{cfg.result_dir}/renders"
-        os.makedirs(self.render_dir, exist_ok=True)
+        Path(self.render_dir).mkdir(parents=True, exist_ok=True)
 
         # Tensorboard
         self.writer = SummaryWriter(log_dir=f"{cfg.result_dir}/tb")
@@ -427,8 +433,9 @@ class Runner:
         Ks: Tensor,
         width: int,
         height: int,
-        **kwargs,
+        **kwargs: object,
     ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, dict]:
+        """Rasterize the current splats for the provided camera batch."""
         means = self.splats["means"]  # [N, 3]
         # quats = F.normalize(self.splats["quats"], dim=-1)  # [N, 4]
         # rasterization does normalization internally
@@ -511,12 +518,13 @@ class Runner:
             info,
         )
 
-    def train(self):
+    def train(self) -> None:
+        """Run the main optimization loop."""
         cfg = self.cfg
         device = self.device
 
         # Dump cfg.
-        with open(f"{cfg.result_dir}/cfg.json", "w") as f:
+        with Path(cfg.result_dir, "cfg.json").open("w") as f:
             json.dump(vars(cfg), f)
 
         max_steps = cfg.max_steps
@@ -776,8 +784,8 @@ class Runner:
                     "num_GS": len(self.splats["means"]),
                 }
                 print("Step: ", step, stats)
-                with open(
-                    f"{self.stats_dir}/train_step{step:04d}.json", "w"
+                with Path(self.stats_dir, f"train_step{step:04d}.json").open(
+                    "w"
                 ) as f:
                     json.dump(stats, f)
                 torch.save(
@@ -807,7 +815,7 @@ class Runner:
                 self.viewer.update(step, num_train_rays_per_step)
 
     @torch.no_grad()
-    def eval(self, step: int):
+    def eval(self, step: int) -> None:
         """Entry for evaluation."""
         print("Running evaluation...")
         cfg = self.cfg
@@ -940,7 +948,7 @@ class Runner:
             "ellipse_time": ellipse_time,
             "num_GS": len(self.splats["means"]),
         }
-        with open(f"{self.stats_dir}/val_step{step:04d}.json", "w") as f:
+        with Path(self.stats_dir, f"val_step{step:04d}.json").open("w") as f:
             json.dump(stats, f)
         # save stats to tensorboard
         for k, v in stats.items():
@@ -948,7 +956,7 @@ class Runner:
         self.writer.flush()
 
     @torch.no_grad()
-    def render_traj(self, step: int):
+    def render_traj(self, step: int) -> None:
         """Entry for trajectory rendering."""
         print("Running trajectory rendering...")
         cfg = self.cfg
@@ -1003,7 +1011,7 @@ class Runner:
 
         # save to video
         video_dir = f"{cfg.result_dir}/videos"
-        os.makedirs(video_dir, exist_ok=True)
+        Path(video_dir).mkdir(parents=True, exist_ok=True)
         writer = imageio.get_writer(f"{video_dir}/traj_{step}.mp4", fps=30)
         for canvas in canvas_all:
             writer.append_data(canvas)
@@ -1013,7 +1021,7 @@ class Runner:
     @torch.no_grad()
     def _viewer_render_fn(
         self, camera_state: CameraState, render_tab_state: RenderTabState
-    ):
+    ) -> np.ndarray:
         assert isinstance(render_tab_state, GsplatRenderTabState)
         if render_tab_state.preview_render:
             width = render_tab_state.render_width
@@ -1089,7 +1097,8 @@ class Runner:
         return renders
 
 
-def main(cfg: Config):
+def main(cfg: Config) -> None:
+    """Run 2DGS training or evaluate a checkpoint."""
     runner = Runner(cfg)
 
     if cfg.ckpt is not None:

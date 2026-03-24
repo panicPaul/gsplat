@@ -14,14 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
+from pathlib import Path
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 
 
-def expand_named_params(named_params):
+def expand_named_params(named_params: list[tuple[str, object]]) -> list:
     """Expand a list of (name, value) tuples into pytest.param objects with IDs.
 
     Args:
@@ -45,7 +45,7 @@ def expand_named_params(named_params):
 
 def load_test_data(
     data_path: str | None = None,
-    device="cuda",
+    device: str = "cuda",
     scene_crop: tuple[float, float, float, float, float, float] = (
         -2,
         -2,
@@ -55,14 +55,12 @@ def load_test_data(
         2,
     ),
     scene_grid: int = 1,
-):
+) -> tuple:
     """Load the test data."""
     assert scene_grid % 2 == 1, "scene_grid must be odd"
 
     if data_path is None:
-        data_path = os.path.join(
-            os.path.dirname(__file__), "../assets/test_garden.npz"
-        )
+        data_path = Path(__file__).parent / "../assets/test_garden.npz"
     data = np.load(data_path)
     height, width = data["height"].item(), data["width"].item()
     viewmats = torch.from_numpy(data["viewmats"]).float().to(device)
@@ -111,8 +109,13 @@ def load_test_data(
 
 
 def get_inlier_abserror_mask(
-    actual, expected, *, quantile=None, atol=None, rtol=None
-):
+    actual: torch.Tensor,
+    expected: torch.Tensor,
+    *,
+    quantile: float | None = None,
+    atol: float | None = None,
+    rtol: float | None = None,
+) -> torch.Tensor:
     """Create mask for inliers based on error thresholds.
 
     Combines quantile-based filtering with absolute/relative tolerance checks.
@@ -153,7 +156,7 @@ def get_inlier_abserror_mask(
     return mask
 
 
-def assert_shape(name: str, t: torch.Tensor, shape: tuple):
+def assert_shape(name: str, t: torch.Tensor, shape: tuple) -> bool:
     """Check if the shape of a tensor matches a given shape.
 
     Args:
@@ -169,24 +172,26 @@ def assert_shape(name: str, t: torch.Tensor, shape: tuple):
     try:
         torch.broadcast_shapes(t.shape, shape)
         return True
-    except Exception:
-        raise ValueError(f"{name} must have shape {shape}, got {t.shape}")
+    except Exception as err:
+        raise ValueError(
+            f"{name} must have shape {shape}, got {t.shape}"
+        ) from err
 
 
 def assert_close(
-    actual,
-    expected,
+    actual: torch.Tensor,
+    expected: torch.Tensor,
     *,
-    allow_subclasses=True,
-    rtol=None,
-    atol=None,
-    equal_nan=False,
-    check_device=True,
-    check_dtype=True,
-    check_layout=True,
-    check_stride=False,
-    msg=None,
-):
+    allow_subclasses: bool = True,
+    rtol: float | None = None,
+    atol: float | None = None,
+    equal_nan: bool = False,
+    check_device: bool = True,
+    check_dtype: bool = True,
+    check_layout: bool = True,
+    check_stride: bool = False,
+    msg: str | None = None,
+) -> None:
     # rtol, atol = 0,0
 
     torch.testing.assert_close(
@@ -204,7 +209,9 @@ def assert_close(
     )
 
 
-def assert_mismatch_ratio(actual, expected, *, max=1e-5):
+def assert_mismatch_ratio(
+    actual: torch.Tensor, expected: torch.Tensor, *, max: float = 1e-5
+) -> None:
     """Assert that the mismatch ratio is less than a given tolerance."""
     if max is None:
         max = 1e-5

@@ -13,8 +13,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Sphinx configuration for the gsplat documentation."""
+
+from pathlib import Path
+
 __version__ = None
-exec(open("../../gsplat/version.py").read())
+exec(
+    (Path(__file__).resolve().parents[2] / "gsplat" / "version.py")
+    .open()
+    .read()
+)
 
 # -- Project information
 

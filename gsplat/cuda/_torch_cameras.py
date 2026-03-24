@@ -237,7 +237,7 @@ class _BaseCameraModel(ABC):
         width: int,
         height: int,
         shutter_type: RollingShutterType = RollingShutterType.GLOBAL,
-    ):
+    ) -> None:
         self.width = width
         self.height = height
         self.shutter_type = shutter_type
@@ -256,7 +256,7 @@ class _BaseCameraModel(ABC):
         rs_type: RollingShutterType = RollingShutterType.GLOBAL,
         # Optional[RowOffsetStructuredSpinningLidarModelParameters]
         # Can't type it here to avoid circular import with _torch_lidars
-        lidar_coeffs=None,
+        lidar_coeffs: object = None,
     ) -> "_BaseCameraModel":
         """Factory method to create appropriate camera model.
 
@@ -538,7 +538,7 @@ class _BaseCameraModel(ABC):
         shutter_pose_start: Tensor,  # [B, 7]
         shutter_pose_end: Tensor,  # [B, 7]
         margin_factor: float,
-        rolling_shutter_iterations=10,
+        rolling_shutter_iterations: int = 10,
     ) -> tuple[Tensor, Tensor]:
         """Project world points to image coordinates with rolling shutter correction.
 
@@ -684,7 +684,7 @@ class _PerfectPinholeCameraModel(_BaseCameraModel):
         width: int,
         height: int,
         rs_type: RollingShutterType,
-    ):
+    ) -> None:
         # Preconditions
         B = focal_lengths.shape[:-1]
         assert_shape("focal_lengths", focal_lengths, B + (2,))
@@ -788,7 +788,7 @@ class _OpenCVPinholeCameraModel(_BaseCameraModel):
         thin_prism_coeffs: Tensor | None = None,  # [B, 4]
         max_undistortion_iterations: int = 5,
         min_2d_norm: float = 1e-12,
-    ):
+    ) -> None:
         # Preconditions
         B = focal_lengths.shape[:-1]
         assert_shape("focal_lengths", focal_lengths, B + (2,))
@@ -921,7 +921,7 @@ class _OpenCVPinholeCameraModel(_BaseCameraModel):
         # Perspective projection: [x/z, y/z]
         uv = cam_ray[..., :2] / cam_ray[..., 2:3]
 
-        icD, delta, r2 = self._compute_distortion(uv)
+        icD, delta, _r2 = self._compute_distortion(uv)
         valid_distortion = icD > 0.8
 
         uvND = icD.unsqueeze(-1) * uv + delta
@@ -968,7 +968,7 @@ class _OpenCVPinholeCameraModel(_BaseCameraModel):
 
         # Start from distorted points as initial guess
         uv_hat = cam_point_0
-        for i in range(self.max_undistortion_iterations):
+        for _i in range(self.max_undistortion_iterations):
             # Compute current distortion for uv_hat
             icD, delta, _ = self.compute_distortion(uv_hat)
 
@@ -1033,9 +1033,9 @@ class _OpenCVPinholeCameraModel(_BaseCameraModel):
         r = x * x + y * y
         r2 = r * r
 
-        # Compute α = 1 + k1·r + k2·r² + k3·r³
+        # Compute α = 1 + k1·r + k2·r² + k3·r³ # noqa
         # Compute β = 1 + k4·r + k5·r² + k6·r³
-        # Compute d = α/β (inverse radial distortion coefficient)
+        # Compute d = α/β (inverse radial distortion coefficient) # noqa
         alpha = 1.0 + r * (k1 + r * (k2 + r * k3))
         beta = 1.0 + r * (k4 + r * (k5 + r * k6))
         d = alpha / beta  # iCD
@@ -1072,7 +1072,7 @@ class _OpenCVPinholeCameraModel(_BaseCameraModel):
         )
 
         # Compute derivatives for the Jacobian
-        # First, compute derivatives of α and β w.r.t. r
+        # First, compute derivatives of α and β w.r.t. r # noqa
         alpha_r = k1 + r * (2.0 * k2 + r * (3.0 * k3))
         beta_r = k4 + r * (2.0 * k5 + r * (3.0 * k6))
 
@@ -1153,7 +1153,7 @@ class _OpenCVPinholeCameraModel(_BaseCameraModel):
 
         eps: float = 1e-6
         uv_hat = uv_0
-        for i in range(self.max_undistortion_iterations):
+        for _i in range(self.max_undistortion_iterations):
             res, J, valid_jac = self._compute_residual_and_jacobian(
                 uv_hat, uv_0
             )  # [M, 2], [M, 2, 2]
@@ -1232,7 +1232,7 @@ class _OpenCVFisheyeCameraModel(_BaseCameraModel):
         radial_coeffs: Tensor | None = None,  # [B, 4]
         min_2d_norm: float = 1e-6,
         newton_iterations: int = 20,
-    ):
+    ) -> None:
         """Initialize OpenCV fisheye camera model.
 
         Args:
@@ -1700,7 +1700,7 @@ class _FThetaCameraModel(_BaseCameraModel):
         dist_params: FThetaCameraDistortionParameters,
         min_2d_norm: float = 1e-6,
         newton_iterations: int = 3,
-    ):
+    ) -> None:
         """Initialize FTheta camera model.
 
         Matches CUDA FThetaCameraModel constructor.

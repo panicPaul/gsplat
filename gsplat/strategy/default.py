@@ -128,7 +128,7 @@ class DefaultStrategy(Strategy):
         self,
         params: dict[str, torch.nn.Parameter] | torch.nn.ParameterDict,
         optimizers: dict[str, torch.optim.Optimizer],
-    ):
+    ) -> None:
         """Sanity check for the parameters and optimizers.
 
         Check if:
@@ -156,7 +156,7 @@ class DefaultStrategy(Strategy):
         state: dict[str, Any],
         step: int,
         info: dict[str, Any],
-    ):
+    ) -> None:
         """Callback function to be executed before the `loss.backward()` call."""
         assert self.key_for_gradient in info, (
             "The 2D means of the Gaussians is required but missing."
@@ -171,7 +171,7 @@ class DefaultStrategy(Strategy):
         step: int,
         info: dict[str, Any],
         packed: bool = False,
-    ):
+    ) -> None:
         """Callback function to be executed after the `loss.backward()` call."""
         if step >= self.refine_stop_iter:
             return
@@ -220,7 +220,7 @@ class DefaultStrategy(Strategy):
         state: dict[str, Any],
         info: dict[str, Any],
         packed: bool = False,
-    ):
+    ) -> None:
         for key in [
             "width",
             "height",

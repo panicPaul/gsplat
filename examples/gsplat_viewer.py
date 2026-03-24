@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Viewer components for 3D Gaussian Splatting rendering."""
+
 from collections.abc import Callable
 from pathlib import Path
 from typing import Literal
@@ -25,6 +27,8 @@ from nerfview import RenderTabState, Viewer
 
 
 class GsplatRenderTabState(RenderTabState):
+    """Render tab state for gsplat viewer."""
+
     # non-controlable parameters
     total_gs_count: int = 0
     rendered_gs_count: int = 0
@@ -57,16 +61,17 @@ class GsplatViewer(Viewer):
         render_fn: Callable,
         output_dir: Path,
         mode: Literal["rendering", "training"] = "rendering",
-    ):
+    ) -> None:
+        """Initialize the gsplat viewer."""
         super().__init__(server, render_fn, output_dir, mode)
         server.gui.set_panel_label("gsplat viewer")
 
-    def _init_rendering_tab(self):
+    def _init_rendering_tab(self) -> None:
         self.render_tab_state = GsplatRenderTabState()
         self._rendering_tab_handles = {}
         self._rendering_folder = self.server.gui.add_folder("Rendering")
 
-    def _populate_rendering_tab(self):
+    def _populate_rendering_tab(self) -> None:
         server = self.server
         with self._rendering_folder:
             with server.gui.add_folder("Gsplat"):
@@ -93,7 +98,7 @@ class GsplatViewer(Viewer):
                 )
 
                 @max_sh_degree_number.on_update
-                def _(_) -> None:
+                def _(_: object) -> None:
                     self.render_tab_state.max_sh_degree = int(
                         max_sh_degree_number.value
                     )
@@ -112,7 +117,7 @@ class GsplatViewer(Viewer):
                 )
 
                 @near_far_plane_vec2.on_update
-                def _(_) -> None:
+                def _(_: object) -> None:
                     self.render_tab_state.near_plane = (
                         near_far_plane_vec2.value[0]
                     )
@@ -131,7 +136,7 @@ class GsplatViewer(Viewer):
                 )
 
                 @radius_clip_slider.on_update
-                def _(_) -> None:
+                def _(_: object) -> None:
                     self.render_tab_state.radius_clip = radius_clip_slider.value
                     self.rerender(_)
 
@@ -145,7 +150,7 @@ class GsplatViewer(Viewer):
                 )
 
                 @eps2d_slider.on_update
-                def _(_) -> None:
+                def _(_: object) -> None:
                     self.render_tab_state.eps2d = eps2d_slider.value
                     self.rerender(_)
 
@@ -156,7 +161,7 @@ class GsplatViewer(Viewer):
                 )
 
                 @backgrounds_slider.on_update
-                def _(_) -> None:
+                def _(_: object) -> None:
                     self.render_tab_state.backgrounds = backgrounds_slider.value
                     self.rerender(_)
 
@@ -168,7 +173,7 @@ class GsplatViewer(Viewer):
                 )
 
                 @render_mode_dropdown.on_update
-                def _(_) -> None:
+                def _(_: object) -> None:
                     if "depth" in render_mode_dropdown.value:
                         normalize_nearfar_checkbox.disabled = False
                         inverse_checkbox.disabled = False
@@ -188,7 +193,7 @@ class GsplatViewer(Viewer):
                 )
 
                 @normalize_nearfar_checkbox.on_update
-                def _(_) -> None:
+                def _(_: object) -> None:
                     self.render_tab_state.normalize_nearfar = (
                         normalize_nearfar_checkbox.value
                     )
@@ -202,7 +207,7 @@ class GsplatViewer(Viewer):
                 )
 
                 @inverse_checkbox.on_update
-                def _(_) -> None:
+                def _(_: object) -> None:
                     self.render_tab_state.inverse = inverse_checkbox.value
                     self.rerender(_)
 
@@ -214,7 +219,7 @@ class GsplatViewer(Viewer):
                 )
 
                 @colormap_dropdown.on_update
-                def _(_) -> None:
+                def _(_: object) -> None:
                     self.render_tab_state.colormap = colormap_dropdown.value
                     self.rerender(_)
 
@@ -226,7 +231,7 @@ class GsplatViewer(Viewer):
                 )
 
                 @rasterize_mode_dropdown.on_update
-                def _(_) -> None:
+                def _(_: object) -> None:
                     self.render_tab_state.rasterize_mode = (
                         rasterize_mode_dropdown.value
                     )
@@ -240,7 +245,7 @@ class GsplatViewer(Viewer):
                 )
 
                 @camera_model_dropdown.on_update
-                def _(_) -> None:
+                def _(_: object) -> None:
                     self.render_tab_state.camera_model = (
                         camera_model_dropdown.value
                     )
@@ -264,7 +269,7 @@ class GsplatViewer(Viewer):
         )
         super()._populate_rendering_tab()
 
-    def _after_render(self):
+    def _after_render(self) -> None:
         # Update the GUI elements with current values
         self._rendering_tab_handles[
             "total_gs_count_number"

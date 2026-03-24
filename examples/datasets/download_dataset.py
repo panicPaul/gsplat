@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Script to download benchmark dataset(s)"""
+"""Script to download benchmark dataset(s)."""
 
 import os
 import subprocess
@@ -63,14 +63,18 @@ dataset_rename_map = {
 
 @dataclass
 class DownloadData:
-    dataset: dataset_names = "mipnerf360"
-    save_dir: Path = Path(os.getcwd() + "/data")
+    """Configuration for downloading benchmark datasets."""
 
-    def main(self):
+    dataset: dataset_names = "mipnerf360"
+    save_dir: Path = Path.cwd() / "data"
+
+    def main(self) -> None:
+        """Run the download."""
         self.save_dir.mkdir(parents=True, exist_ok=True)
         self.dataset_download(self.dataset)
 
-    def dataset_download(self, dataset: dataset_names):
+    def dataset_download(self, dataset: dataset_names) -> None:
+        """Download the specified dataset."""
         if isinstance(urls[dataset], list):
             for url in urls[dataset]:
                 url_file_name = Path(url).name
@@ -88,6 +92,7 @@ class DownloadData:
 def download_and_extract(
     url: str, download_path: Path, extract_path: Path
 ) -> None:
+    """Download a dataset archive and extract it into the target directory."""
     download_path.parent.mkdir(parents=True, exist_ok=True)
     extract_path.mkdir(parents=True, exist_ok=True)
 
@@ -135,7 +140,7 @@ def download_and_extract(
     # extract
     try:
         subprocess.run(extract_command, check=True)
-        os.remove(download_path)
+        download_path.unlink()
         print("Extraction complete.")
     except subprocess.CalledProcessError as e:
         print(f"Extraction failed: {e}")

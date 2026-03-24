@@ -387,10 +387,10 @@ def _isect_tiles(
     tile_n_bits = (tile_width * tile_height).bit_length()
     assert image_n_bits + tile_n_bits + 32 <= 64
 
-    def binary(num):
+    def binary(num: int) -> str:
         return "".join(f"{c:0>8b}" for c in struct.pack("!f", num))
 
-    def kernel(image_id, gauss_id):
+    def kernel(image_id: int, gauss_id: int) -> None:
         if (
             radii[image_id, gauss_id, 0] <= 0.0
             or radii[image_id, gauss_id, 1] <= 0.0
@@ -521,8 +521,10 @@ def accumulate(
     """
     try:
         from nerfacc import accumulate_along_rays, render_weight_from_alpha
-    except ImportError:
-        raise ImportError("Please install nerfacc package: pip install nerfacc")
+    except ImportError as err:
+        raise ImportError(
+            "Please install nerfacc package: pip install nerfacc"
+        ) from err
 
     image_dims = means2d.shape[:-2]
     I = math.prod(image_dims)
@@ -556,7 +558,7 @@ def accumulate(
     indices = image_ids * image_height * image_width + pixel_ids
     total_pixels = I * image_height * image_width
 
-    weights, trans = render_weight_from_alpha(
+    weights, _trans = render_weight_from_alpha(
         alphas, ray_indices=indices, n_rays=total_pixels
     )
     renders = accumulate_along_rays(
@@ -685,7 +687,7 @@ def _rasterize_to_pixels(
     return render_colors, render_alphas
 
 
-def _eval_sh_bases_fast(basis_dim: int, dirs: Tensor):
+def _eval_sh_bases_fast(basis_dim: int, dirs: Tensor) -> Tensor:
     """Evaluate spherical harmonics bases at unit direction for high orders.
 
     Uses approach described by Efficient Spherical Harmonic Evaluation,
@@ -770,7 +772,7 @@ def _spherical_harmonics(
     degrees_to_use: int,
     dirs: torch.Tensor,  # [..., 3]
     coeffs: torch.Tensor,  # [..., K, 3]
-):
+) -> torch.Tensor:
     """Pytorch implementation of `gsplat.cuda._wrapper.spherical_harmonics()`."""
     assert (degrees_to_use + 1) ** 2 <= coeffs.shape[-2], coeffs.shape
     batch_dims = dirs.shape[:-1]

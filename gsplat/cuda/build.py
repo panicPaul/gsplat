@@ -16,13 +16,13 @@
 
 """Build utilities for compiling the gsplat CUDA extension."""
 
-import glob
 import json
 import os
 import platform
 import shutil
 import sys
 import time
+from pathlib import Path
 from types import SimpleNamespace
 
 import torch
@@ -39,6 +39,7 @@ except ImportError as e:
             "Alternatively, upgrade to PyTorch >= 2.9."
         ) from e
     raise
+from collections.abc import Generator
 from contextlib import contextmanager, nullcontext
 
 try:
@@ -48,7 +49,7 @@ try:
 except ImportError:
     _console = None
 
-PATH = os.path.dirname(os.path.abspath(__file__))
+PATH = Path(__file__).parent
 DEBUG = os.getenv("DEBUG", "0") == "1"
 FAST_MATH = os.getenv("FAST_MATH", "1") == "1"
 WITH_SYMBOLS = os.getenv("WITH_SYMBOLS", "0") == "1"
@@ -69,22 +70,22 @@ BUILD_CAMERA_WRAPPERS = (
 NUM_CHANNELS = os.getenv("NUM_CHANNELS")
 
 
-def get_build_parameters():
+def get_build_parameters() -> SimpleNamespace:
     """Return the build parameters for the gsplat CUDA extension."""
     name = "gsplat_cuda"
-    current_dir = os.path.dirname(os.path.abspath(__file__))
+    current_dir = Path(__file__).parent
 
     # Include paths -----------------------------------
     extra_include_paths = [
-        os.path.join(PATH, "include/"),
-        os.path.join(current_dir, "csrc", "third_party", "glm"),
+        str(PATH / "include/"),
+        str(current_dir / "csrc" / "third_party" / "glm"),
     ]
 
     # Source files ------------------------------------
     sources = (
-        list(glob.glob(os.path.join(PATH, "csrc/*.cu")))
-        + list(glob.glob(os.path.join(PATH, "csrc/*.cpp")))
-        + [os.path.join(PATH, "ext.cpp")]
+        [str(p) for p in (PATH / "csrc").glob("*.cu")]
+        + [str(p) for p in (PATH / "csrc").glob("*.cpp")]
+        + [str(PATH / "ext.cpp")]
     )
 
     # Compiler flags ----------------------------------
@@ -134,7 +135,7 @@ def get_build_parameters():
     # Silencing of warnings
     # GLM/Torch has spammy and very annoyingly verbose warnings that this suppresses
     extra_cuda_cflags += ["-diag-suppress", "20012,186"]
-    if not os.name == "nt":
+    if os.name != "nt":
         extra_cflags += ["-Wno-sign-compare", "-Wno-attributes"]
 
     if BUILD_2DGS is not None:
@@ -216,7 +217,7 @@ def get_build_parameters():
     )
 
 
-def build_and_load_gsplat():
+def build_and_load_gsplat() -> None:
     build_params = get_build_parameters()
 
     build_dir = jit._get_build_directory(build_params.name, verbose=False)
@@ -224,17 +225,17 @@ def build_and_load_gsplat():
     # If JIT is interrupted it might leave a lock in the build directory.
     # We dont want it to exist in any case.
     try:
-        os.remove(os.path.join(build_dir, "lock"))
+        (Path(build_dir) / "lock").unlink()
     except OSError:
         pass
 
     # Check if the build parameters have changed since last build (if any
-    saved_build_params_fname = os.path.join(build_dir, "build_params.json")
+    saved_build_params_fname = Path(build_dir) / "build_params.json"
     saved_build_params = None
     build_params_changed = False
     try:
-        if os.path.exists(saved_build_params_fname):
-            with open(saved_build_params_fname) as f:
+        if saved_build_params_fname.exists():
+            with saved_build_params_fname.open() as f:
                 saved_build_params = SimpleNamespace(**json.load(f))
             build_params_changed = saved_build_params != build_params
     except Exception as e:
@@ -274,14 +275,14 @@ def build_and_load_gsplat():
 
     # Make sure the build directory exists.
     if build_dir:
-        os.makedirs(build_dir, exist_ok=True)
+        Path(build_dir).mkdir(parents=True, exist_ok=True)
 
     # Save our current build parameters
-    with open(saved_build_params_fname, "w") as f:
+    with saved_build_params_fname.open("w") as f:
         json.dump(build_params.__dict__, f)
 
     @contextmanager
-    def status_context():
+    def status_context() -> Generator[None, None, None]:
         tic = time.time()
         msg = f"gsplat: Setting up CUDA with MAX_JOBS={MAX_JOBS or 'max'} (This may take a few minutes the first time)"
         if _console is not None:
@@ -304,9 +305,9 @@ def build_and_load_gsplat():
 
     # If the build exists, we assume the extension has been built
     # and we can load it.
-    module_exists = os.path.exists(
-        os.path.join(build_dir, f"{build_params.name}.so")
-    ) or os.path.exists(os.path.join(build_dir, f"{build_params.name}.lib"))
+    module_exists = (Path(build_dir) / f"{build_params.name}.so").exists() or (
+        Path(build_dir) / f"{build_params.name}.lib"
+    ).exists()
 
     with (
         status_context()

@@ -277,8 +277,10 @@ def accumulate_eval3d(
     """
     try:
         from nerfacc import accumulate_along_rays, render_weight_from_alpha
-    except ImportError:
-        raise ImportError("Please install nerfacc package: pip install nerfacc")
+    except ImportError as err:
+        raise ImportError(
+            "Please install nerfacc package: pip install nerfacc"
+        ) from err
 
     # Get dimensions
     # Note: means/quats/scales are SHARED across cameras (batch_dims, N, 3/4/3)
@@ -535,7 +537,7 @@ def _rasterize_to_pixels_eval3d(
     return_sample_counts: bool = False,
     use_hit_distance: bool = False,
     return_normals: bool = False,  # Whether to compute normals
-):
+) -> tuple:
     """PyTorch reference implementation of rasterize_to_pixels_eval3d().
 
     Returns (colors, alphas) by default. Optionally returns last_ids and/or sample_counts
@@ -602,7 +604,7 @@ def _rasterize_to_pixels_eval3d(
     channels = colors.shape[-1]
     device = means.device
 
-    # Reshape to treat batch×cameras as separate images
+    # Reshape to treat batch x cameras as separate images
     # NOTE: means/quats/scales are SHARED across cameras, so don't expand them!
     # Only colors/opacities/viewmats/Ks are per-camera
     B = math.prod(batch_dims)

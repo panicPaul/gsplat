@@ -13,12 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Utilities for computing exposure values from EXIF metadata."""
+
 from __future__ import annotations
 
 import math
 from pathlib import Path
 
-import piexif  # type: ignore
+import piexif
 
 
 def _extract_shutter_time(exif: dict) -> float | None:

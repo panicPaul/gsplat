@@ -1,3 +1,5 @@
+"""Interactive viewer example for rasterized 2D Gaussian splats."""
+
 # SPDX-FileCopyrightText: Copyright 2023-2026 the Regents of the University of California, Nerfstudio Team and contributors. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -18,6 +20,7 @@ import math
 import time
 from pathlib import Path
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 import viser
@@ -28,7 +31,13 @@ from nerfview import CameraState, RenderTabState, apply_float_colormap
 from gsplat_viewer_2dgs import GsplatRenderTabState, GsplatViewer
 
 
-def main(local_rank: int, world_rank, world_size: int, args):
+def main(
+    local_rank: int,
+    world_rank: int,
+    world_size: int,
+    args: argparse.Namespace,
+) -> None:
+    """Load checkpoints and serve a 2DGS viewer session."""
     torch.manual_seed(42)
     device = torch.device("cuda", local_rank)
 
@@ -55,7 +64,7 @@ def main(local_rank: int, world_rank, world_size: int, args):
     @torch.no_grad()
     def viewer_render_fn(
         camera_state: CameraState, render_tab_state: RenderTabState
-    ):
+    ) -> np.ndarray:
         assert isinstance(render_tab_state, GsplatRenderTabState)
         if render_tab_state.preview_render:
             width = render_tab_state.render_width

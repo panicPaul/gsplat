@@ -16,3 +16,5 @@
 """Optimizers for Gaussian splat parameters."""
 
 from .selective_adam import SelectiveAdam
+
+__all__ = ["SelectiveAdam"]

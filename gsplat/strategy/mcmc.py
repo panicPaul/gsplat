@@ -86,7 +86,7 @@ class MCMCStrategy(Strategy):
         self,
         params: dict[str, torch.nn.Parameter] | torch.nn.ParameterDict,
         optimizers: dict[str, torch.optim.Optimizer],
-    ):
+    ) -> None:
         """Sanity check for the parameters and optimizers.
 
         Check if:
@@ -126,7 +126,7 @@ class MCMCStrategy(Strategy):
         step: int,
         info: dict[str, Any],
         lr: float,
-    ):
+    ) -> None:
         """Callback function to be executed after the `loss.backward()` call.
 
         Args:

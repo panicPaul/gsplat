@@ -36,7 +36,7 @@ CameraModel = Literal["pinhole", "ortho", "fisheye", "ftheta", "lidar"]
 
 
 def _make_lazy_cuda_func(name: str) -> Callable:
-    def call_cuda(*args, **kwargs):
+    def call_cuda(*args: Any, **kwargs: Any) -> Any:
         # The following import statement is required to ensure that C++ module
         # gsplat/csrc.so is loaded (and JIT-compiled if necessary). Upon module
         # load, the gsplat PyTorch operators are imported into the
@@ -140,7 +140,7 @@ class BivariateWindshieldModelParameters:
     MAX_COEFFS: int = 21  # default, overriden by C++ value
 
     @classmethod
-    def _ensure_cuda_cls(cls):
+    def _ensure_cuda_cls(cls) -> None:
         if cls._cuda_cls is None:
             cls._cuda_cls = _make_lazy_cuda_cls(
                 "BivariateWindshieldModelParameters"
@@ -148,12 +148,12 @@ class BivariateWindshieldModelParameters:
             cls.MAX_ORDER = cls._cuda_cls.get_max_order()
             cls.MAX_COEFFS = cls._cuda_cls.get_max_coeffs()
 
-    def __new__(cls):
+    def __new__(cls) -> "BivariateWindshieldModelParameters":
         cls._ensure_cuda_cls()
         return cls._cuda_cls()
 
 
-def has_camera_wrappers():
+def has_camera_wrappers() -> bool:
 
     # PyTorch will throw a RuntimeError if the class is not registered
     # but that's okay in this case because we're just checking if it exists
@@ -163,32 +163,32 @@ def has_camera_wrappers():
         return False
 
 
-def has_2dgs():
+def has_2dgs() -> bool:
 
     return hasattr(torch.ops.gsplat, "projection_2dgs_fused_fwd")
 
 
-def has_3dgs():
+def has_3dgs() -> bool:
 
     return hasattr(torch.ops.gsplat, "projection_ewa_simple_fwd")
 
 
-def has_3dgut():
+def has_3dgut() -> bool:
 
     return hasattr(torch.ops.gsplat, "projection_ut_3dgs_fused")
 
 
-def has_adam():
+def has_adam() -> bool:
 
     return hasattr(torch.ops.gsplat, "adam")
 
 
-def has_reloc():
+def has_reloc() -> bool:
 
     return hasattr(torch.ops.gsplat, "relocation")
 
 
-def create_camera_model(
+def create_camera_model(  # noqa: ANN202
     camera_model: str,
     width: int | None = None,
     height: int | None = None,
@@ -211,12 +211,8 @@ def create_camera_model(
             "RowOffsetStructuredSpinningLidarModel"
         )
         return RowOffsetStructuredSpinningLidarModelCUDA(lidar_coeffs.to_cpp())
-    assert width is not None, (
-        "width is required for non-lidar camera models"
-    )
-    assert height is not None, (
-        "height is required for non-lidar camera models"
-    )
+    assert width is not None, "width is required for non-lidar camera models"
+    assert height is not None, "height is required for non-lidar camera models"
     assert principal_points is not None, (
         "principal_points is required for non-lidar camera models"
     )
@@ -240,7 +236,7 @@ class FOV(FOVBase):
     def from_base(cls, base: FOVBase) -> "FOV":
         return cls(start=base.start, span=base.span, direction=base.direction)
 
-    def to_cpp(self):
+    def to_cpp(self) -> Any:
         FOVCUDA = _make_lazy_cuda_cls("FOV")
         return FOVCUDA(start=self.start, span=self.span)
 
@@ -1376,7 +1372,7 @@ class _QuatScaleToCovarPreci(torch.autograd.Function):
 
     @staticmethod
     def forward(
-        ctx,
+        ctx: torch.autograd.function.FunctionCtx,
         quats: Tensor,  # [..., 4],
         scales: Tensor,  # [..., 3],
         compute_covar: bool = True,
@@ -1393,7 +1389,11 @@ class _QuatScaleToCovarPreci(torch.autograd.Function):
         return covars, precis
 
     @staticmethod
-    def backward(ctx, v_covars: Tensor, v_precis: Tensor):
+    def backward(
+        ctx: torch.autograd.function.FunctionCtx,
+        v_covars: Tensor,
+        v_precis: Tensor,
+    ) -> tuple:
         quats, scales = ctx.saved_tensors
         compute_covar = ctx.compute_covar
         compute_preci = ctx.compute_preci
@@ -1425,7 +1425,7 @@ class _Proj(torch.autograd.Function):
 
     @staticmethod
     def forward(
-        ctx,
+        ctx: torch.autograd.function.FunctionCtx,
         means: Tensor,  # [..., C, N, 3]
         covars: Tensor,  # [..., C, N, 3, 3]
         Ks: Tensor,  # [..., C, 3, 3]
@@ -1456,7 +1456,11 @@ class _Proj(torch.autograd.Function):
         return means2d, covars2d
 
     @staticmethod
-    def backward(ctx, v_means2d: Tensor, v_covars2d: Tensor):
+    def backward(
+        ctx: torch.autograd.function.FunctionCtx,
+        v_means2d: Tensor,
+        v_covars2d: Tensor,
+    ) -> tuple:
         means, covars, Ks = ctx.saved_tensors
         width = ctx.width
         height = ctx.height
@@ -1486,7 +1490,7 @@ class _FullyFusedProjection(torch.autograd.Function):
 
     @staticmethod
     def forward(
-        ctx,
+        ctx: torch.autograd.function.FunctionCtx,
         means: Tensor,  # [..., N, 3]
         covars: Tensor,  # [..., N, 6] or None
         quats: Tensor,  # [..., N, 4] or None
@@ -1552,7 +1556,14 @@ class _FullyFusedProjection(torch.autograd.Function):
         return radii, means2d, depths, conics, compensations
 
     @staticmethod
-    def backward(ctx, v_radii, v_means2d, v_depths, v_conics, v_compensations):
+    def backward(
+        ctx: torch.autograd.function.FunctionCtx,
+        v_radii: Tensor,
+        v_means2d: Tensor,
+        v_depths: Tensor,
+        v_conics: Tensor,
+        v_compensations: Tensor | None,
+    ) -> tuple:
         (
             means,
             covars,
@@ -1772,7 +1783,7 @@ class _RasterizeToPixels(torch.autograd.Function):
 
     @staticmethod
     def forward(
-        ctx,
+        ctx: torch.autograd.function.FunctionCtx,
         means2d: Tensor,  # [..., N, 2] or [nnz, 2]
         conics: Tensor,  # [..., N, 3] or [nnz, 3]
         colors: Tensor,  # [..., N, channels] or [nnz, channels]
@@ -1825,10 +1836,10 @@ class _RasterizeToPixels(torch.autograd.Function):
 
     @staticmethod
     def backward(
-        ctx,
+        ctx: torch.autograd.function.FunctionCtx,
         v_render_colors: Tensor,  # [..., H, W, 3]
         v_render_alphas: Tensor,  # [..., H, W, 1]
-    ):
+    ) -> tuple:
         (
             means2d,
             conics,
@@ -1902,7 +1913,7 @@ class _RasterizeToPixelsEval3D(torch.autograd.Function):
 
     @staticmethod
     def forward(
-        ctx,
+        ctx: torch.autograd.function.FunctionCtx,
         means: Tensor,  # [..., N, 3]
         quats: Tensor,  # [..., N, 4]
         scales: Tensor,  # [..., N, 3]
@@ -2051,7 +2062,7 @@ class _RasterizeToPixelsEval3D(torch.autograd.Function):
 
     @staticmethod
     def backward(
-        ctx,
+        ctx: torch.autograd.function.FunctionCtx,
         v_render_colors: Tensor,  # [..., C, H, W, 3]
         v_render_alphas: Tensor,  # [..., C, H, W, 1]
         v_last_ids: Tensor
@@ -2059,7 +2070,7 @@ class _RasterizeToPixelsEval3D(torch.autograd.Function):
         v_sample_counts: Tensor
         | None,  # None - sample_counts is integer (non-differentiable)
         v_render_normals: Tensor | None,  # [..., C, H, W, 3]
-    ):
+    ) -> tuple:
         (
             means,
             quats,
@@ -2182,7 +2193,7 @@ class _FullyFusedProjectionPacked(torch.autograd.Function):
 
     @staticmethod
     def forward(
-        ctx,
+        ctx: torch.autograd.function.FunctionCtx,
         means: Tensor,  # [..., N, 3]
         covars: Tensor,  # [..., N, 6] or None
         quats: Tensor,  # [..., N, 4] or None
@@ -2270,17 +2281,17 @@ class _FullyFusedProjectionPacked(torch.autograd.Function):
 
     @staticmethod
     def backward(
-        ctx,
-        v_batch_ids,
-        v_camera_ids,
-        v_gaussian_ids,
-        v_indptr,
-        v_radii,
-        v_means2d,
-        v_depths,
-        v_conics,
-        v_compensations,
-    ):
+        ctx: torch.autograd.function.FunctionCtx,
+        v_batch_ids: Tensor | None,
+        v_camera_ids: Tensor | None,
+        v_gaussian_ids: Tensor | None,
+        v_indptr: Tensor | None,
+        v_radii: Tensor | None,
+        v_means2d: Tensor,
+        v_depths: Tensor,
+        v_conics: Tensor,
+        v_compensations: Tensor | None,
+    ) -> tuple:
         (
             batch_ids,
             camera_ids,
@@ -2404,7 +2415,11 @@ class _SphericalHarmonics(torch.autograd.Function):
 
     @staticmethod
     def forward(
-        ctx, sh_degree: int, dirs: Tensor, coeffs: Tensor, masks: Tensor
+        ctx: torch.autograd.function.FunctionCtx,
+        sh_degree: int,
+        dirs: Tensor,
+        coeffs: Tensor,
+        masks: Tensor,
     ) -> Tensor:
         colors = _make_lazy_cuda_func("spherical_harmonics_fwd")(
             sh_degree, dirs, coeffs, masks
@@ -2415,7 +2430,9 @@ class _SphericalHarmonics(torch.autograd.Function):
         return colors
 
     @staticmethod
-    def backward(ctx, v_colors: Tensor):
+    def backward(
+        ctx: torch.autograd.function.FunctionCtx, v_colors: Tensor
+    ) -> tuple:
         dirs, coeffs, masks = ctx.saved_tensors
         sh_degree = ctx.sh_degree
         num_bases = ctx.num_bases
@@ -2551,7 +2568,7 @@ class _FullyFusedProjection2DGS(torch.autograd.Function):
 
     @staticmethod
     def forward(
-        ctx,
+        ctx: torch.autograd.function.FunctionCtx,
         means: Tensor,  # [..., N, 3]
         quats: Tensor,  # [..., N, 4]
         scales: Tensor,  # [..., N, 3]
@@ -2587,7 +2604,7 @@ class _FullyFusedProjection2DGS(torch.autograd.Function):
             Ks,
             radii,
             ray_transforms,
-            normals,
+            _normals,
         )
         ctx.width = width
         ctx.height = height
@@ -2597,8 +2614,13 @@ class _FullyFusedProjection2DGS(torch.autograd.Function):
 
     @staticmethod
     def backward(
-        ctx, v_radii, v_means2d, v_depths, v_ray_transforms, v_normals
-    ):
+        ctx: torch.autograd.function.FunctionCtx,
+        v_radii: Tensor | None,
+        v_means2d: Tensor,
+        v_depths: Tensor,
+        v_ray_transforms: Tensor,
+        v_normals: Tensor,
+    ) -> tuple:
         (
             means,
             quats,
@@ -2607,7 +2629,7 @@ class _FullyFusedProjection2DGS(torch.autograd.Function):
             Ks,
             radii,
             ray_transforms,
-            normals,
+            _normals,
         ) = ctx.saved_tensors
         width = ctx.width
         height = ctx.height
@@ -2660,7 +2682,7 @@ class _FullyFusedProjectionPacked2DGS(torch.autograd.Function):
 
     @staticmethod
     def forward(
-        ctx,
+        ctx: torch.autograd.function.FunctionCtx,
         means: Tensor,  # [..., N, 3]
         quats: Tensor,  # [..., N, 4]
         scales: Tensor,  # [..., N, 3]
@@ -2674,7 +2696,7 @@ class _FullyFusedProjectionPacked2DGS(torch.autograd.Function):
         sparse_grad: bool,
     ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
         (
-            indptr,
+            _indptr,
             batch_ids,
             camera_ids,
             gaussian_ids,
@@ -2723,16 +2745,16 @@ class _FullyFusedProjectionPacked2DGS(torch.autograd.Function):
 
     @staticmethod
     def backward(
-        ctx,
-        v_batch_ids,
-        v_camera_ids,
-        v_gaussian_ids,
-        v_radii,
-        v_means2d,
-        v_depths,
-        v_ray_transforms,
-        v_normals,
-    ):
+        ctx: torch.autograd.function.FunctionCtx,
+        v_batch_ids: Tensor | None,
+        v_camera_ids: Tensor | None,
+        v_gaussian_ids: Tensor | None,
+        v_radii: Tensor | None,
+        v_means2d: Tensor,
+        v_depths: Tensor,
+        v_ray_transforms: Tensor,
+        v_normals: Tensor,
+    ) -> tuple:
         (
             batch_ids,
             camera_ids,
@@ -3066,7 +3088,7 @@ class _RasterizeToPixels2DGS(torch.autograd.Function):
 
     @staticmethod
     def forward(
-        ctx,
+        ctx: torch.autograd.function.FunctionCtx,
         means2d: Tensor,
         ray_transforms: Tensor,
         colors: Tensor,
@@ -3140,13 +3162,13 @@ class _RasterizeToPixels2DGS(torch.autograd.Function):
 
     @staticmethod
     def backward(
-        ctx,
+        ctx: torch.autograd.function.FunctionCtx,
         v_render_colors: Tensor,
         v_render_alphas: Tensor,
         v_render_normals: Tensor,
         v_render_distort: Tensor,
         v_render_median: Tensor,
-    ):
+    ) -> tuple:
 
         (
             means2d,

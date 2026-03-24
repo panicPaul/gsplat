@@ -116,7 +116,7 @@ def all_to_all_int32(
     # return as a list of integers or tensors, based on the input
     return [
         v.item() if isinstance(tensor, int) else v
-        for v, tensor in zip(collected, values)
+        for v, tensor in zip(collected, values, strict=False)
     ]
 
 
@@ -186,7 +186,7 @@ def all_gather_tensor_list(
     # split the collected tensor and reshape to the original shape
     out_tensor_tuple = torch.split(collected, sizes, dim=-1)
     out_tensor_list = []
-    for out_tensor, tensor in zip(out_tensor_tuple, tensor_list):
+    for out_tensor, tensor in zip(out_tensor_tuple, tensor_list, strict=False):
         out_tensor = out_tensor.view(
             -1, *tensor.shape[1:]
         )  # [N * world_size, *]
@@ -282,13 +282,13 @@ def all_to_all_tensor_list(
     # split the collected tensor and reshape to the original shape
     out_tensor_tuple = torch.split(collected, sizes, dim=-1)
     out_tensor_list = []
-    for out_tensor, tensor in zip(out_tensor_tuple, tensor_list):
+    for out_tensor, tensor in zip(out_tensor_tuple, tensor_list, strict=False):
         out_tensor = out_tensor.view(-1, *tensor.shape[1:])
         out_tensor_list.append(out_tensor)
     return out_tensor_list
 
 
-def _find_free_port():
+def _find_free_port() -> int:
     import socket
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -311,7 +311,7 @@ def _distributed_worker(
     if local_rank is None:  # single Node
         local_rank = world_rank
     if verbose:
-        print("Distributed worker: %d / %d" % (world_rank + 1, world_size))
+        print(f"Distributed worker: {world_rank + 1} / {world_size}")
     distributed = world_size > 1
     if distributed:
         torch.cuda.set_device(local_rank)
@@ -328,7 +328,7 @@ def _distributed_worker(
         torch.distributed.barrier()
         torch.distributed.destroy_process_group()
     if verbose:
-        print("Job Done for worker: %d / %d" % (world_rank + 1, world_size))
+        print(f"Job Done for worker: {world_rank + 1} / {world_size}")
     return True
 
 

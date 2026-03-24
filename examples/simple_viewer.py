@@ -1,3 +1,5 @@
+"""Interactive viewer example for rasterized 3D Gaussian splats."""
+
 # SPDX-FileCopyrightText: Copyright 2023-2026 the Regents of the University of California, Nerfstudio Team and contributors. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -15,7 +17,6 @@
 
 import argparse
 import math
-import os
 import time
 from pathlib import Path
 
@@ -33,7 +34,13 @@ from nerfview import CameraState, RenderTabState, apply_float_colormap
 from gsplat_viewer import GsplatRenderTabState, GsplatViewer
 
 
-def main(local_rank: int, world_rank, world_size: int, args):
+def main(
+    local_rank: int,
+    world_rank: int,
+    world_size: int,
+    args: argparse.Namespace,
+) -> None:
+    """Render a test scene or checkpoint and serve it in the viewer."""
     torch.manual_seed(42)
     device = torch.device("cuda", local_rank)
 
@@ -103,7 +110,7 @@ def main(local_rank: int, world_rank, world_size: int, args):
         render_depths = render_depths / render_depths.max()
 
         # dump batch images
-        os.makedirs(args.output_dir, exist_ok=True)
+        Path(args.output_dir).mkdir(parents=True, exist_ok=True)
         canvas = (
             torch.cat(
                 [
@@ -149,7 +156,7 @@ def main(local_rank: int, world_rank, world_size: int, args):
     @torch.no_grad()
     def viewer_render_fn(
         camera_state: CameraState, render_tab_state: RenderTabState
-    ):
+    ) -> np.ndarray:
         assert isinstance(render_tab_state, GsplatRenderTabState)
         if render_tab_state.preview_render:
             width = render_tab_state.render_width

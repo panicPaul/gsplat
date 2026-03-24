@@ -152,8 +152,10 @@ def accumulate_2dgs(
     """
     try:
         from nerfacc import accumulate_along_rays, render_weight_from_alpha
-    except ImportError:
-        raise ImportError("Please install nerfacc package: pip install nerfacc")
+    except ImportError as err:
+        raise ImportError(
+            "Please install nerfacc package: pip install nerfacc"
+        ) from err
 
     image_dims = means2d.shape[:-2]
     I = math.prod(image_dims)
@@ -194,7 +196,7 @@ def accumulate_2dgs(
     indices = image_ids * image_height * image_width + pixel_ids
     total_pixels = I * image_height * image_width
 
-    weights, trans = render_weight_from_alpha(
+    weights, _trans = render_weight_from_alpha(
         alphas, ray_indices=indices, n_rays=total_pixels
     )
     renders = accumulate_along_rays(
@@ -229,7 +231,7 @@ def _rasterize_to_pixels_2dgs(
     flatten_ids: Tensor,  # [n_isects]
     backgrounds: Tensor | None = None,  # [..., channels]
     batch_per_iter: int = 100,
-):
+) -> tuple[Tensor, Tensor, Tensor]:
     """Pytorch implementation of `gsplat.cuda._wrapper.rasterize_to_pixels_2dgs()`.
 
     This function rasterizes 2D Gaussians to pixels in a Pytorch-friendly way. It

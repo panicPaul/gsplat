@@ -17,6 +17,7 @@
 
 import math
 from io import BytesIO
+from pathlib import Path
 from typing import Literal
 
 import numpy as np
@@ -597,7 +598,7 @@ def export_splats(
         raise ValueError(f"Unsupported format: {format}")
 
     if save_to:
-        with open(save_to, "wb") as binary_file:
+        with Path(save_to).open("wb") as binary_file:
             binary_file.write(data)
 
     return data

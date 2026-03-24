@@ -13,10 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Code borrowed from
-
-https://github.com/google-research/multinerf/blob/5b4d4f64608ec8077222c52fdf814d40acc10bc1/internal/camera_utils.py
-"""
+"""Code borrowed from https://github.com/google-research/multinerf/blob/5b4d4f64608ec8077222c52fdf814d40acc10bc1/internal/camera_utils.py."""
 
 import numpy as np
 import scipy
@@ -57,15 +54,15 @@ def average_pose(poses: np.ndarray) -> np.ndarray:
 
 
 def generate_spiral_path(
-    poses,
-    bounds,
-    n_frames=120,
-    n_rots=2,
-    zrate=0.5,
-    spiral_scale_f=1.0,
-    spiral_scale_r=1.0,
-    focus_distance=0.75,
-):
+    poses: np.ndarray,
+    bounds: np.ndarray,
+    n_frames: int = 120,
+    n_rots: int = 2,
+    zrate: float = 0.5,
+    spiral_scale_f: float = 1.0,
+    spiral_scale_r: float = 1.0,
+    focus_distance: float = 0.75,
+) -> np.ndarray:
     """Calculates a forward facing spiral path for rendering."""
     # Find a reasonable 'focus depth' for this dataset as a weighted average
     # of conservative near and far bounds in disparity space.
@@ -120,7 +117,7 @@ def generate_ellipse_path_z(
     z_low = np.percentile((poses[:, :3, 3]), 10, axis=0)
     z_high = np.percentile((poses[:, :3, 3]), 90, axis=0)
 
-    def get_positions(theta):
+    def get_positions(theta: np.ndarray) -> np.ndarray:
         # Interpolate between bounds with trig functions to get ellipse in x-y.
         # Optionally also interpolate in z to change camera height along path.
         return np.stack(
@@ -182,7 +179,7 @@ def generate_ellipse_path_y(
     y_low = np.percentile((poses[:, :3, 3]), 10, axis=0)
     y_high = np.percentile((poses[:, :3, 3]), 90, axis=0)
 
-    def get_positions(theta):
+    def get_positions(theta: np.ndarray) -> np.ndarray:
         # Interpolate between bounds with trig functions to get ellipse in x-z.
         # Optionally also interpolate in y to change camera height along path.
         return np.stack(
@@ -227,7 +224,7 @@ def generate_interpolated_path(
     spline_degree: int = 5,
     smoothness: float = 0.03,
     rot_weight: float = 0.1,
-):
+) -> np.ndarray:
     """Creates a smooth spline path between input keyframe camera poses.
 
     Spline is calculated with poses in format (position, lookat-point, up-point).
@@ -243,18 +240,18 @@ def generate_interpolated_path(
       Array of new camera poses with shape (n_interp * (n - 1), 3, 4).
     """
 
-    def poses_to_points(poses, dist):
+    def poses_to_points(poses: np.ndarray, dist: float) -> np.ndarray:
         """Converts from pose matrices to (position, lookat, up) format."""
         pos = poses[:, :3, -1]
         lookat = poses[:, :3, -1] - dist * poses[:, :3, 2]
         up = poses[:, :3, -1] + dist * poses[:, :3, 1]
         return np.stack([pos, lookat, up], 1)
 
-    def points_to_poses(points):
+    def points_to_poses(points: np.ndarray) -> np.ndarray:
         """Converts from (position, lookat, up) format to pose matrices."""
         return np.array([viewmatrix(p - l, u - p, p) for p, l, u in points])
 
-    def interp(points, n, k, s):
+    def interp(points: np.ndarray, n: int, k: int, s: float) -> np.ndarray:
         """Runs multidimensional B-spline interpolation on the input points."""
         sh = points.shape
         pts = np.reshape(points, (sh[0], -1))

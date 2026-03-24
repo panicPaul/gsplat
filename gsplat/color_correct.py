@@ -16,6 +16,7 @@
 """Color correction utilities for post-processing evaluation."""
 
 import torch
+from torch import Tensor
 
 
 def color_correct_quadratic(
@@ -60,7 +61,7 @@ def color_correct_quadratic(
     img_mat = img.reshape([-1, num_channels])
     ref_mat = ref.reshape([-1, num_channels])
 
-    def is_unclipped(z):
+    def is_unclipped(z: Tensor) -> Tensor:
         return (z >= eps) & (z <= 1 - eps)  # z \in [eps, 1-eps].
 
     mask0 = is_unclipped(img_mat)

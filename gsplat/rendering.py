@@ -598,7 +598,8 @@ def rasterization(
             )
         )
         return torch.stack(
-            [torch.cat(l, dim=0) for l in zip(*view_list)], dim=0
+            [torch.cat(l, dim=0) for l in zip(*view_list, strict=False)],
+            dim=0,
         )
 
     def check_features(
@@ -1259,8 +1260,16 @@ def rasterization(
 
 
 def _maybe_evaluate_sh(
-    sh_degree, features, means, radii, viewmats, batch_dims, C, N, clamp
-):
+    sh_degree: int | None,
+    features: Tensor,
+    means: Tensor,
+    radii: Tensor,
+    viewmats: Tensor,
+    batch_dims: tuple,
+    C: int,
+    N: int,
+    clamp: bool,
+) -> Tensor:
     num_batch_dims = len(batch_dims)
 
     # Turn features into [..., C, N, D] or [..., nnz, D] to pass into rasterize_to_pixels()
@@ -1797,7 +1806,7 @@ def rasterization_inria_wrapper(
     eps2d: float = 0.3,
     sh_degree: int | None = None,
     backgrounds: Tensor | None = None,
-    **kwargs,
+    **kwargs: object,
 ) -> tuple[Tensor, Tensor, dict]:
     """Wrapper for Inria's rasterization backend.
 
@@ -1927,7 +1936,7 @@ def rasterization_inria_wrapper(
                         _colors.shape[:-1], 3 - _colors.shape[-1], device=device
                     )
                     _colors = torch.cat([_colors, pad], dim=-1)
-                _render_colors_, radii = rasterizer(
+                _render_colors_, _radii = rasterizer(
                     means3D=means[bid],
                     means2D=means2D[bid],
                     shs=_colors if colors.dim() == 4 else None,
@@ -2336,7 +2345,7 @@ def rasterization_2dgs_inria_wrapper(
     sh_degree: int | None = None,
     backgrounds: Tensor | None = None,
     depth_ratio: int = 0,
-    **kwargs,
+    **kwargs: object,
 ) -> tuple[tuple, dict]:
     """Wrapper for 2DGS's rasterization backend which is based on Inria's backend.
 

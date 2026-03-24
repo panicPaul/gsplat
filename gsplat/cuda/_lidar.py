@@ -64,7 +64,9 @@ def relative_angle(
     return normalize_angle(rel_angle, start=0, scale=scale)
 
 
-def angle_range_wrap_around(start_angle, end_angle, scale: float = 1) -> bool:
+def angle_range_wrap_around(
+    start_angle: Tensor, end_angle: Tensor, scale: float = 1
+) -> Tensor:
     return torch.abs(end_angle - start_angle) >= 2 * math.pi * scale
 
 
@@ -90,7 +92,7 @@ class SphericalUnitCoord:
     elevation: Tensor
     azimuth: Tensor
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         assert self.elevation.dtype == self.azimuth.dtype, (
             self.elevation.dtype,
             self.azimuth.dtype,
@@ -124,18 +126,18 @@ class SphericalUnitCoord:
     def shape(self) -> tuple:
         return self.elevation.shape
 
-    def reshape(self, *args) -> "SphericalUnitCoord":
+    def reshape(self, *args: int) -> "SphericalUnitCoord":
         return SphericalUnitCoord(
             elevation=self.elevation.reshape(*args),
             azimuth=self.azimuth.reshape(*args),
         )
 
-    def __getitem__(self, key) -> "SphericalUnitCoord":
+    def __getitem__(self, key: object) -> "SphericalUnitCoord":
         return SphericalUnitCoord(
             elevation=self.elevation[key], azimuth=self.azimuth[key]
         )
 
-    def _binop(self, other, op) -> "SphericalUnitCoord":
+    def _binop(self, other: object, op: object) -> "SphericalUnitCoord":
         if isinstance(other, SphericalUnitCoord):
             return SphericalUnitCoord(
                 elevation=op(self.elevation, other.elevation),
@@ -145,39 +147,39 @@ class SphericalUnitCoord:
             elevation=op(self.elevation, other), azimuth=op(self.azimuth, other)
         )
 
-    def _rbinop(self, other, op) -> "SphericalUnitCoord":
+    def _rbinop(self, other: object, op: object) -> "SphericalUnitCoord":
         return SphericalUnitCoord(
             elevation=op(other, self.elevation), azimuth=op(other, self.azimuth)
         )
 
-    def __add__(self, other) -> "SphericalUnitCoord":
+    def __add__(self, other: object) -> "SphericalUnitCoord":
         return self._binop(other, lambda a, b: a + b)
 
-    def __radd__(self, other) -> "SphericalUnitCoord":
+    def __radd__(self, other: object) -> "SphericalUnitCoord":
         return self._rbinop(other, lambda a, b: a + b)
 
-    def __sub__(self, other) -> "SphericalUnitCoord":
+    def __sub__(self, other: object) -> "SphericalUnitCoord":
         return self._binop(other, lambda a, b: a - b)
 
-    def __rsub__(self, other) -> "SphericalUnitCoord":
+    def __rsub__(self, other: object) -> "SphericalUnitCoord":
         return self._rbinop(other, lambda a, b: a - b)
 
-    def __mul__(self, other) -> "SphericalUnitCoord":
+    def __mul__(self, other: object) -> "SphericalUnitCoord":
         return self._binop(other, lambda a, b: a * b)
 
-    def __rmul__(self, other) -> "SphericalUnitCoord":
+    def __rmul__(self, other: object) -> "SphericalUnitCoord":
         return self._rbinop(other, lambda a, b: a * b)
 
-    def __mod__(self, other) -> "SphericalUnitCoord":
+    def __mod__(self, other: object) -> "SphericalUnitCoord":
         return self._binop(other, lambda a, b: a % b)
 
-    def __rmod__(self, other) -> "SphericalUnitCoord":
+    def __rmod__(self, other: object) -> "SphericalUnitCoord":
         return self._rbinop(other, lambda a, b: a % b)
 
-    def __truediv__(self, other) -> "SphericalUnitCoord":
+    def __truediv__(self, other: object) -> "SphericalUnitCoord":
         return self._binop(other, lambda a, b: a / b)
 
-    def __rtruediv__(self, other) -> "SphericalUnitCoord":
+    def __rtruediv__(self, other: object) -> "SphericalUnitCoord":
         return self._rbinop(other, lambda a, b: a / b)
 
 
@@ -185,7 +187,7 @@ class SphericalUnitCoord:
 class FOV:
     """Represents a field-of-view with start and span in radians."""
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         assert self.span >= 0
 
     # Start angle of the field-of-view in radians
@@ -288,7 +290,7 @@ class RowOffsetStructuredSpinningLidarModelParameters(
 
         super().__init__(**vars(params))
 
-    def __post_init__(self, fov_eps_factor: int):
+    def __post_init__(self, fov_eps_factor: int) -> None:
         super().__post_init__()
 
         assert fov_eps_factor > 0
@@ -335,11 +337,11 @@ class RowOffsetStructuredSpinningLidarModelParameters(
         )
 
     @property
-    def device(self):
+    def device(self) -> torch.device:
         return self.row_elevations_rad.device
 
     @property
-    def dtype(self):
+    def dtype(self) -> torch.dtype:
         return self.row_elevations_rad.dtype
 
     def __hash__(self) -> int:
@@ -352,19 +354,15 @@ class RowOffsetStructuredSpinningLidarModelParameters(
             )
         )
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: object) -> bool:
         if not isinstance(
             other, RowOffsetStructuredSpinningLidarModelParameters
         ):
             return NotImplemented
         return (
             super().__eq__(other)
-            and torch.equal(
-                self.row_elevations_rad, other.row_elevations_rad
-            )
-            and torch.equal(
-                self.column_azimuths_rad, other.column_azimuths_rad
-            )
+            and torch.equal(self.row_elevations_rad, other.row_elevations_rad)
+            and torch.equal(self.column_azimuths_rad, other.column_azimuths_rad)
             and torch.equal(
                 self.row_azimuth_offsets_rad, other.row_azimuth_offsets_rad
             )
@@ -469,7 +467,7 @@ class LidarTiling:
     # in the lidar sensor space.
     tiles_to_elements_map: torch.Tensor
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         assert self.cdf_elevation.dtype == torch.int32, self.cdf_elevation.dtype
         assert self.cdf_elevation.ndim == 1, f"{self.cdf_elevation.shape=}"
         assert self.cdf_elevation[-1].item() == self.n_bins_elevation, (
@@ -523,7 +521,10 @@ class RowOffsetStructuredSpinningLidarModelParametersExt(
     tiling: LidarTiling
 
     def __init__(
-        self, angles_to_columns_map: Tensor, tiling: LidarTiling, **kwargs
+        self,
+        angles_to_columns_map: Tensor,
+        tiling: LidarTiling,
+        **kwargs: object,
     ) -> None:
         assert angles_to_columns_map is not None
         assert tiling is not None
@@ -652,7 +653,7 @@ def compute_angles_to_columns_map(
     lidar: RowOffsetStructuredSpinningLidarModelParameters,
     resolution_factor: float = 4,
     dtype: torch.dtype = torch.int32,
-):
+) -> Tensor:
     """Computes angles to column map as a 2D array of shape resolution_factor * (n_rows, n_columns)."""
     # The idea here is to create a regular high-resolution grid spanning the whole FOV
     # and store in each grid cell the projected azimuth of the closest lidar ray to it.
@@ -749,7 +750,7 @@ def angles_to_dense_ray_mask_cdf(
 ) -> Tensor:  # [res_elev+1, res_azim+1]
 
     # dense tile indices
-    def uniform_quantization(x: torch.Tensor, n_bins: int):
+    def uniform_quantization(x: torch.Tensor, n_bins: int) -> torch.Tensor:
         return (x * n_bins).int() % n_bins
 
     relative_angles = relative_sensor_angles(parameters, angles)
@@ -796,7 +797,7 @@ def angles_to_tile_indices(
     n_bins_azimuth: int,
     n_bins_elevation: int,
     cdf_elevation: torch.Tensor,
-):
+) -> Tensor:
     # the length of cdf_elevation is one plus the number of bins, so we need to subtract one here
     resolution = len(cdf_elevation) - 1
 
@@ -920,7 +921,7 @@ def compute_histogram_equalization(
         data: torch.Tensor,
         bins: int | np.ndarray | torch.Tensor,
         range: tuple[float, float],
-    ):
+    ) -> tuple:
         if isinstance(bins, torch.Tensor):
             bins = bins.cpu().numpy()
         hist, *others = np.histogram(data.cpu().numpy(), bins=bins, range=range)
@@ -968,7 +969,7 @@ def compute_histogram_equalization(
     angles_elevation_np = angles.elevation.flatten().cpu().numpy()
     edges_elevation_np = edges_elevation.cpu().numpy()
 
-    def compute_hist2d(n_bins_azimuth):
+    def compute_hist2d(n_bins_azimuth: int) -> tuple:
         return np.histogram2d(
             angles_azimuth_np,
             angles_elevation_np,
@@ -998,7 +999,7 @@ def compute_histogram_equalization(
 def compute_tiling(
     lidar_params: RowOffsetStructuredSpinningLidarModelParameters,
     n_bins_elevation: int = 16,
-    max_pts_per_tile=16 * 16,
+    max_pts_per_tile: int = 16 * 16,
     resolution_elevation: int = 1600,
     densification_factor_azimuth: int = 8,
 ) -> LidarTiling:

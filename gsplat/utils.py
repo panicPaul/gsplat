@@ -18,6 +18,7 @@
 import math
 import struct
 import warnings
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -27,7 +28,7 @@ from torch import Tensor
 
 def save_ply(
     splats: torch.nn.ParameterDict, dir: str, colors: torch.Tensor | None = None
-):
+) -> None:
     """Save Gaussian splats to a PLY file (deprecated, use export_splats instead)."""
     warnings.warn(
         "save_ply() is deprecated and may be removed in a future release. "
@@ -73,7 +74,7 @@ def save_ply(
 
     num_points = means.shape[0]
 
-    with open(dir, "wb") as f:
+    with Path(dir).open("wb") as f:
         # Write PLY header
         f.write(b"ply\n")
         f.write(b"format binary_little_endian 1.0\n")
@@ -153,12 +154,12 @@ def normalized_quat_to_rotmat(quat: Tensor) -> Tensor:
     return mat.reshape(quat.shape[:-1] + (3, 3))
 
 
-def log_transform(x):
+def log_transform(x: Tensor) -> Tensor:
     """Apply signed log1p transform: sign(x) * log(1 + |x|)."""
     return torch.sign(x) * torch.log1p(torch.abs(x))
 
 
-def inverse_log_transform(y):
+def inverse_log_transform(y: Tensor) -> Tensor:
     """Apply inverse signed log1p transform: sign(y) * expm1(|y|)."""
     return torch.sign(y) * (torch.expm1(torch.abs(y)))
 
@@ -257,7 +258,9 @@ def depth_to_normal(
     return normals
 
 
-def get_projection_matrix(znear, zfar, fovX, fovY, device="cuda"):
+def get_projection_matrix(
+    znear: float, zfar: float, fovX: float, fovY: float, device: str = "cuda"
+) -> Tensor:
     """Create OpenGL-style projection matrix."""
     tanHalfFovY = math.tan(fovY / 2)
     tanHalfFovX = math.tan(fovX / 2)

@@ -1,3 +1,5 @@
+"""Shared helper modules and utilities for example training scripts."""
+
 # SPDX-FileCopyrightText: Copyright 2023-2026 the Regents of the University of California, Nerfstudio Team and contributors. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -27,7 +29,8 @@ from torch import Tensor
 class CameraOptModule(torch.nn.Module):
     """Camera pose optimization module."""
 
-    def __init__(self, n: int):
+    def __init__(self, n: int) -> None:
+        """Initialize learnable camera pose deltas for `n` cameras."""
         super().__init__()
         # Delta positions (3D) + Delta rotations (6D)
         self.embeds = torch.nn.Embedding(n, 9)
@@ -36,10 +39,12 @@ class CameraOptModule(torch.nn.Module):
             "identity", torch.tensor([1.0, 0.0, 0.0, 0.0, 1.0, 0.0])
         )
 
-    def zero_init(self):
+    def zero_init(self) -> None:
+        """Initialize all pose deltas to zero."""
         torch.nn.init.zeros_(self.embeds.weight)
 
-    def random_init(self, std: float):
+    def random_init(self, std: float) -> None:
+        """Initialize pose deltas from a zero-mean normal distribution."""
         torch.nn.init.normal_(self.embeds.weight, std=std)
 
     def forward(self, camtoworlds: Tensor, embed_ids: Tensor) -> Tensor:
@@ -78,7 +83,8 @@ class AppearanceOptModule(torch.nn.Module):
         sh_degree: int = 3,
         mlp_width: int = 64,
         mlp_depth: int = 2,
-    ):
+    ) -> None:
+        """Initialize appearance embeddings and the color prediction MLP."""
         super().__init__()
         self.embed_dim = embed_dim
         self.sh_degree = sh_degree
@@ -105,6 +111,7 @@ class AppearanceOptModule(torch.nn.Module):
             features: (N, feature_dim)
             embed_ids: (C,)
             dirs: (C, N, 3)
+            sh_degree: Active spherical harmonics degree to evaluate.
 
         Returns:
             colors: (C, N, 3)
@@ -142,8 +149,9 @@ class AppearanceOptModule(torch.nn.Module):
 
 
 def rotation_6d_to_matrix(d6: Tensor) -> Tensor:
-    """Converts 6D rotation representation by Zhou et al. [1] to rotation matrix
-    using Gram--Schmidt orthogonalization per Section B of [1]. Adapted from pytorch3d.
+    """Converts 6D rotation representation by Zhou et al. [1] to rotation matrix.
+
+    Uses Gram--Schmidt orthogonalization per Section B of [1]. Adapted from pytorch3d.
 
     Args:
         d6: 6D rotation representation, of size (*, 6)
@@ -165,6 +173,7 @@ def rotation_6d_to_matrix(d6: Tensor) -> Tensor:
 
 
 def knn(x: Tensor, K: int = 4) -> Tensor:
+    """Return Euclidean distances to the `K` nearest neighbors for each point."""
     x_np = x.cpu().numpy()
     model = NearestNeighbors(n_neighbors=K, metric="euclidean").fit(x_np)
     distances, _ = model.kneighbors(x_np)
@@ -172,18 +181,21 @@ def knn(x: Tensor, K: int = 4) -> Tensor:
 
 
 def rgb_to_sh(rgb: Tensor) -> Tensor:
+    """Convert RGB values in `[0, 1]` to the DC spherical harmonics coefficient."""
     C0 = 0.28209479177387814
     return (rgb - 0.5) / C0
 
 
-def set_random_seed(seed: int):
+def set_random_seed(seed: int) -> None:
+    """Seed Python, NumPy, and PyTorch random number generators."""
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
 
 
 # ref: https://github.com/hbb1/2d-gaussian-splatting/blob/main/utils/general_utils.py#L163
-def colormap(img, cmap="jet"):
+def colormap(img: np.ndarray, cmap: str = "jet") -> Tensor:
+    """Render a Matplotlib colormap legend image for the input array."""
     W, H = img.shape[:2]
     dpi = 300
     fig, ax = plt.subplots(1, figsize=(H / dpi, W / dpi), dpi=dpi)

@@ -14,9 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Simple trainer for 3D Gaussian Splatting."""
+
 import json
 import math
-import os
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -68,6 +69,8 @@ from utils import (
 
 @dataclass
 class Config:
+    """Configuration for the simple trainer."""
+
     # Disable viewer
     disable_viewer: bool = False
     # Path to the .pt files. If provide, it will skip training and run evaluation only.
@@ -224,7 +227,8 @@ class Config:
     with_ut: bool = False
     with_eval3d: bool = False
 
-    def adjust_steps(self, factor: float):
+    def adjust_steps(self, factor: float) -> None:
+        """Scale all step-related config values by factor."""
         self.eval_steps = [int(i * factor) for i in self.eval_steps]
         self.save_steps = [int(i * factor) for i in self.save_steps]
         self.ply_steps = [int(i * factor) for i in self.ply_steps]
@@ -276,6 +280,7 @@ def create_splats_with_optimizers(
     world_rank: int = 0,
     world_size: int = 1,
 ) -> tuple[torch.nn.ParameterDict, dict[str, torch.optim.Optimizer]]:
+    """Create Gaussian splats and their optimizers."""
     if init_type == "sfm":
         points = torch.from_numpy(parser.points).float()
         rgbs = torch.from_numpy(parser.points_rgb / 255.0).float()
@@ -354,8 +359,9 @@ class Runner:
     """Engine for training and testing."""
 
     def __init__(
-        self, local_rank: int, world_rank, world_size: int, cfg: Config
+        self, local_rank: int, world_rank: int, world_size: int, cfg: Config
     ) -> None:
+        """Initialize the runner."""
         set_random_seed(42 + local_rank)
 
         self.cfg = cfg
@@ -365,17 +371,17 @@ class Runner:
         self.device = f"cuda:{local_rank}"
 
         # Where to dump results.
-        os.makedirs(cfg.result_dir, exist_ok=True)
+        Path(cfg.result_dir).mkdir(parents=True, exist_ok=True)
 
         # Setup output directories.
         self.ckpt_dir = f"{cfg.result_dir}/ckpts"
-        os.makedirs(self.ckpt_dir, exist_ok=True)
+        Path(self.ckpt_dir).mkdir(parents=True, exist_ok=True)
         self.stats_dir = f"{cfg.result_dir}/stats"
-        os.makedirs(self.stats_dir, exist_ok=True)
+        Path(self.stats_dir).mkdir(parents=True, exist_ok=True)
         self.render_dir = f"{cfg.result_dir}/renders"
-        os.makedirs(self.render_dir, exist_ok=True)
+        Path(self.render_dir).mkdir(parents=True, exist_ok=True)
         self.ply_dir = f"{cfg.result_dir}/ply"
-        os.makedirs(self.ply_dir, exist_ok=True)
+        Path(self.ply_dir).mkdir(parents=True, exist_ok=True)
 
         # Tensorboard
         self.writer = SummaryWriter(log_dir=f"{cfg.result_dir}/tb")
@@ -584,7 +590,7 @@ class Runner:
         # Track if Gaussians are frozen (for controller distillation)
         self._gaussians_frozen = False
 
-    def freeze_gaussians(self):
+    def freeze_gaussians(self) -> None:
         """Freeze all Gaussian parameters for controller distillation.
 
         This prevents Gaussians from being updated by any loss (including regularization)
@@ -611,8 +617,9 @@ class Runner:
         frame_idcs: Tensor | None = None,
         camera_idcs: Tensor | None = None,
         exposure: Tensor | None = None,
-        **kwargs,
+        **kwargs: object,
     ) -> tuple[Tensor, Tensor, dict]:
+        """Rasterize Gaussian splats to render images."""
         means = self.splats["means"]  # [N, 3]
         # quats = F.normalize(self.splats["quats"], dim=-1)  # [N, 4]
         # rasterization does normalization internally
@@ -717,7 +724,8 @@ class Runner:
 
         return render_colors, render_alphas, info
 
-    def train(self):
+    def train(self) -> None:
+        """Run the main optimization loop."""
         cfg = self.cfg
         device = self.device
         world_rank = self.world_rank
@@ -725,7 +733,7 @@ class Runner:
 
         # Dump cfg.
         if world_rank == 0:
-            with open(f"{cfg.result_dir}/cfg.yml", "w") as f:
+            with Path(cfg.result_dir, "cfg.yml").open("w") as f:
                 yaml.dump(vars(cfg), f)
 
         max_steps = cfg.max_steps
@@ -981,10 +989,10 @@ class Runner:
                     "num_GS": len(self.splats["means"]),
                 }
                 print("Step: ", step, stats)
-                with open(
-                    f"{self.stats_dir}/train_step{step:04d}_rank{self.world_rank}.json",
-                    "w",
-                ) as f:
+                with Path(
+                    self.stats_dir,
+                    f"train_step{step:04d}_rank{self.world_rank}.json",
+                ).open("w") as f:
                     json.dump(stats, f)
                 data = {"step": step, "splats": self.splats.state_dict()}
                 if cfg.pose_opt:
@@ -1134,7 +1142,7 @@ class Runner:
                 self.viewer.update(step, num_train_rays_per_step)
 
     @torch.no_grad()
-    def eval(self, step: int, stage: str = "val"):
+    def eval(self, step: int, stage: str = "val") -> None:
         """Entry for evaluation."""
         print("Running evaluation...")
         cfg = self.cfg
@@ -1233,8 +1241,8 @@ class Runner:
                     f"Number of GS: {stats['num_GS']}"
                 )
             # save stats as json
-            with open(
-                f"{self.stats_dir}/{stage}_step{step:04d}.json", "w"
+            with Path(self.stats_dir, f"{stage}_step{step:04d}.json").open(
+                "w"
             ) as f:
                 json.dump(stats, f)
             # save stats to tensorboard
@@ -1243,7 +1251,7 @@ class Runner:
             self.writer.flush()
 
     @torch.no_grad()
-    def render_traj(self, step: int):
+    def render_traj(self, step: int) -> None:
         """Entry for trajectory rendering."""
         if self.cfg.disable_video:
             return
@@ -1294,7 +1302,7 @@ class Runner:
 
         # save to video
         video_dir = f"{cfg.result_dir}/videos"
-        os.makedirs(video_dir, exist_ok=True)
+        Path(video_dir).mkdir(parents=True, exist_ok=True)
         writer = imageio.get_writer(f"{video_dir}/traj_{step}.mp4", fps=30)
         for i in tqdm.trange(len(camtoworlds_all), desc="Rendering trajectory"):
             camtoworlds = camtoworlds_all[i : i + 1]
@@ -1358,13 +1366,13 @@ class Runner:
             print(f"  - {path.name}")
 
     @torch.no_grad()
-    def run_compression(self, step: int):
+    def run_compression(self, step: int) -> None:
         """Entry for running compression."""
         print("Running compression...")
         world_rank = self.world_rank
 
         compress_dir = f"{cfg.result_dir}/compression/rank{world_rank}"
-        os.makedirs(compress_dir, exist_ok=True)
+        Path(compress_dir).mkdir(parents=True, exist_ok=True)
 
         self.compression_method.compress(compress_dir, self.splats)
 
@@ -1377,7 +1385,7 @@ class Runner:
     @torch.no_grad()
     def _viewer_render_fn(
         self, camera_state: CameraState, render_tab_state: RenderTabState
-    ):
+    ) -> np.ndarray:
         assert isinstance(render_tab_state, GsplatRenderTabState)
         if render_tab_state.preview_render:
             width = render_tab_state.render_width
@@ -1457,7 +1465,10 @@ class Runner:
         return renders
 
 
-def main(local_rank: int, world_rank, world_size: int, cfg: Config):
+def main(
+    local_rank: int, world_rank: int, world_size: int, cfg: Config
+) -> None:
+    """Initialize optional modules and run training or evaluation."""
     # Import post-processing modules based on configuration
     # These imports must be here (not in __main__) for distributed workers
     if cfg.post_processing == "bilateral_grid":
@@ -1555,12 +1566,12 @@ if __name__ == "__main__":
     if cfg.compression == "png":
         try:
             pass
-        except:
+        except ImportError as err:
             raise ImportError(
                 "To use PNG compression, you need to install "
                 "torchpq (instruction at https://github.com/DeMoriarty/TorchPQ?tab=readme-ov-file#install) "
                 "and plas (via 'pip install git+https://github.com/fraunhoferhhi/PLAS.git') "
-            )
+            ) from err
 
     if cfg.with_ut:
         assert cfg.with_eval3d, (

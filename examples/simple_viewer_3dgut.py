@@ -1,3 +1,5 @@
+"""Interactive viewer example for 3DGUT distortion experiments."""
+
 # SPDX-FileCopyrightText: Copyright 2023-2026 the Regents of the University of California, Nerfstudio Team and contributors. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -15,8 +17,8 @@
 
 import argparse
 import math
-import os
 import time
+from pathlib import Path
 
 import imageio
 import nerfview
@@ -30,7 +32,13 @@ from gsplat.distributed import cli
 from gsplat.rendering import rasterization
 
 
-def main(local_rank: int, world_rank, world_size: int, args):
+def main(
+    local_rank: int,
+    world_rank: int,
+    world_size: int,
+    args: argparse.Namespace,
+) -> None:
+    """Render a scene with the selected backend and expose 3DGUT controls."""
     torch.manual_seed(42)
     device = torch.device("cuda", local_rank)
 
@@ -100,7 +108,7 @@ def main(local_rank: int, world_rank, world_size: int, args):
         render_depths = render_depths / render_depths.max()
 
         # dump batch images
-        os.makedirs(args.output_dir, exist_ok=True)
+        Path(args.output_dir).mkdir(parents=True, exist_ok=True)
         canvas = (
             torch.cat(
                 [
@@ -148,7 +156,7 @@ def main(local_rank: int, world_rank, world_size: int, args):
     @torch.no_grad()
     def viewer_render_fn(
         camera_state: nerfview.CameraState, img_wh: tuple[int, int]
-    ):
+    ) -> np.ndarray:
         width, height = img_wh
         c2w = camera_state.c2w
         K = camera_state.get_K(img_wh)

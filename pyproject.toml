@@ -84,7 +84,7 @@ channels = ["nvidia", "conda-forge"]
 platforms = ["linux-64"]
 
 [tool.pixi.pypi-dependencies]
-gsplat = { path = ".", editable = true }
+gsplat = { path = "."}
 
 
 # --- CUDA version features ---
@@ -199,7 +199,6 @@ extend-select = [
   "T10",        # Checks for the presence of debugger calls and imports.
   "UP",         # Type annotations should not use Union, Optional, etc
   "ISC",        # Good use of string concatenation
-  "RET",        # Good return practices
   "SIM",        # Common simplification rules
   "TID",        # Some good import practices
   "PTH",        # Use pathlib instead of os.path

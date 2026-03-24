@@ -13,28 +13,32 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Script to summarize compression benchmark statistics."""
+
 import json
-import os
 import subprocess
 from collections import defaultdict
+from pathlib import Path
 
 import numpy as np
 import tyro
 
 
-def main(results_dir: str, scenes: list[str], stage: str = "compress"):
+def main(results_dir: str, scenes: list[str], stage: str = "compress") -> None:
+    """Summarize compression benchmark statistics for given scenes."""
     print("scenes:", scenes)
 
+    results_path = Path(results_dir)
     summary = defaultdict(list)
     for scene in scenes:
-        scene_dir = os.path.join(results_dir, scene)
+        scene_dir = results_path / scene
 
         if stage == "compress":
-            zip_path = f"{scene_dir}/compression.zip"
-            if os.path.exists(zip_path):
-                subprocess.run(f"rm {zip_path}", shell=True)
+            zip_path = scene_dir / "compression.zip"
+            if zip_path.exists():
+                zip_path.unlink()
             subprocess.run(
-                f"zip -r {zip_path} {scene_dir}/compression/", shell=True
+                f"zip -r {zip_path} {scene_dir / 'compression'}/", shell=True
             )
             out = subprocess.run(
                 f"stat -c%s {zip_path}", shell=True, capture_output=True
@@ -42,9 +46,7 @@ def main(results_dir: str, scenes: list[str], stage: str = "compress"):
             size = int(out.stdout)
             summary["size"].append(size)
 
-        with open(
-            os.path.join(scene_dir, f"stats/{stage}_step29999.json")
-        ) as f:
+        with (scene_dir / "stats" / f"{stage}_step29999.json").open() as f:
             stats = json.load(f)
             for k, v in stats.items():
                 summary[k].append(v)
@@ -53,7 +55,7 @@ def main(results_dir: str, scenes: list[str], stage: str = "compress"):
         summary[k] = np.mean(v)
     summary["scenes"] = scenes
 
-    with open(os.path.join(results_dir, f"{stage}_summary.json"), "w") as f:
+    with (results_path / f"{stage}_summary.json").open("w") as f:
         json.dump(summary, f, indent=2)
 
 

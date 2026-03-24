@@ -32,7 +32,7 @@ class Strategy:
         self,
         params: dict[str, torch.nn.Parameter] | torch.nn.ParameterDict,
         optimizers: dict[str, torch.optim.Optimizer],
-    ):
+    ) -> None:
         """Sanity check for the parameters and optimizers."""
         trainable_params = set(
             [name for name, param in params.items() if param.requires_grad]
@@ -49,18 +49,10 @@ class Strategy:
                 f"but got {len(optimizer.param_groups)}"
             )
 
-    def step_pre_backward(
-        self,
-        *args,
-        **kwargs,
-    ):
+    def step_pre_backward(self, *args, **kwargs) -> None:
         """Callback function to be executed before the `loss.backward()` call."""
         pass
 
-    def step_post_backward(
-        self,
-        *args,
-        **kwargs,
-    ):
+    def step_post_backward(self, *args, **kwargs) -> None:
         """Callback function to be executed after the `loss.backward()` call."""
         pass
