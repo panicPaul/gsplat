@@ -28,11 +28,8 @@ from .cuda._wrapper import (
     RollingShutterType,
     CameraModel,
     FThetaCameraDistortionParameters,
-    FThetaPolynomialType,
     RowOffsetStructuredSpinningLidarModelParametersExt,
     UnscentedTransformParameters,
-    ExternalDistortionModelMeta,
-    ExternalDistortionReferencePolynomial,
     BivariateWindshieldModelParameters,
     fully_fused_projection,
     fully_fused_projection_2dgs,
@@ -561,9 +558,9 @@ def rasterization(
     if rays is not None:
         assert_shape("rays", rays, batch_dims + (C, H, W, 6))
     assert global_z_order or with_ut, "global_z_order can be false only if with_ut=True"
-    assert (camera_model == "lidar") == (
-        lidar_coeffs is not None
-    ), "Lidar coefficients must be given if and only if camera model is lidar"
+    assert (camera_model == "lidar") == (lidar_coeffs is not None), (
+        "Lidar coefficients must be given if and only if camera model is lidar"
+    )
 
     def reshape_view(C: int, world_view: torch.Tensor, N_world: list) -> torch.Tensor:
         view_list = list(
@@ -585,9 +582,9 @@ def rasterization(
                 and features.shape[:-1] == batch_dims + (C, N)
             ), features.shape
             if distributed:
-                assert (
-                    features.dim() == num_batch_dims + 2
-                ), f"Distributed mode only supports per-Gaussian {name}."
+                assert features.dim() == num_batch_dims + 2, (
+                    f"Distributed mode only supports per-Gaussian {name}."
+                )
         else:
             # treat features as SH coefficients, should be in shape [..., N, K, 3] or [..., C, N, K, 3]
             # Allowing for activating partial SH bands
@@ -602,9 +599,9 @@ def rasterization(
             ), features.shape
             assert (sh_degree + 1) ** 2 <= features.shape[-2], features.shape
             if distributed:
-                assert (
-                    features.dim() == num_batch_dims + 3
-                ), f"Distributed mode only supports per-Gaussian {name}."
+                assert features.dim() == num_batch_dims + 3, (
+                    f"Distributed mode only supports per-Gaussian {name}."
+                )
 
     check_features(colors, sh_degree, "colors")
 
@@ -621,23 +618,23 @@ def rasterization(
         or ftheta_coeffs is not None
         or rolling_shutter != RollingShutterType.GLOBAL
     ):
-        assert (
-            with_ut
-        ), "Distortion and rolling shutter are only supported with `with_ut=True`."
+        assert with_ut, (
+            "Distortion and rolling shutter are only supported with `with_ut=True`."
+        )
 
     if rolling_shutter != RollingShutterType.GLOBAL:
-        assert (
-            viewmats_rs is not None
-        ), "Rolling shutter requires to provide viewmats_rs."
+        assert viewmats_rs is not None, (
+            "Rolling shutter requires to provide viewmats_rs."
+        )
     else:
-        assert (
-            viewmats_rs is None
-        ), "viewmats_rs should be None for global rolling shutter."
+        assert viewmats_rs is None, (
+            "viewmats_rs should be None for global rolling shutter."
+        )
 
     if with_ut or with_eval3d:
-        assert (quats is not None) and (
-            scales is not None
-        ), "UT and eval3d requires to provide quats and scales."
+        assert (quats is not None) and (scales is not None), (
+            "UT and eval3d requires to provide quats and scales."
+        )
         assert packed is False, "Packed mode is not supported with UT."
         assert sparse_grad is False, "Sparse grad is not supported with UT."
 
@@ -964,9 +961,7 @@ def rasterization(
     # Rasterize to pixels
 
     # Determine if we need hit distance (computed in rasterization) or Gaussian depth (from projection)
-    if render_mode_has_depth_channel(render_mode) and render_mode_has_color(
-        render_mode
-    ):
+    if render_mode_has_depth_channel(render_mode) and render_mode_has_color(render_mode):
         if render_mode_has_hit_distance(render_mode):
             # Hit distance modes: use zeros as placeholder (kernel will overwrite with hit distance)
             colors = torch.cat((colors, torch.zeros_like(depths[..., None])), dim=-1)
@@ -1299,7 +1294,6 @@ def _rasterization(
         _fully_fused_projection,
         _rasterize_to_pixels,
     )
-    from gsplat.cuda._torch_impl_eval3d import _rasterize_to_pixels_eval3d
     from gsplat.cuda._torch_impl_ut import _fully_fused_projection_with_ut
     from gsplat.cuda._math import _quat_scale_to_covar_preci
 
@@ -1328,8 +1322,7 @@ def _rasterization(
     if sh_degree is None:
         # treat colors as post-activation values, should be in shape [..., N, D] or [..., C, N, D]
         assert (
-            colors.dim() == num_batch_dims + 2
-            and colors.shape[:-1] == batch_dims + (N,)
+            colors.dim() == num_batch_dims + 2 and colors.shape[:-1] == batch_dims + (N,)
         ) or (
             colors.dim() == num_batch_dims + 3
             and colors.shape[:-1] == batch_dims + (C, N)
@@ -1455,9 +1448,7 @@ def _rasterization(
         colors = torch.cat([colors, extra_signals], dim=-1)
 
     # Rasterize to pixels
-    if render_mode_has_depth_channel(render_mode) and render_mode_has_color(
-        render_mode
-    ):
+    if render_mode_has_depth_channel(render_mode) and render_mode_has_color(render_mode):
         colors = torch.cat((colors, depths[..., None]), dim=-1)
         if backgrounds is not None:
             backgrounds = torch.cat(
@@ -1766,8 +1757,7 @@ def rasterization_inria_wrapper(
     if sh_degree is None:
         # treat colors as post-activation values, should be in shape [..., N, D] or [..., C, N, D]
         assert (
-            colors.dim() == num_batch_dims + 2
-            and colors.shape[:-1] == batch_dims + (N,)
+            colors.dim() == num_batch_dims + 2 and colors.shape[:-1] == batch_dims + (N,)
         ) or (
             colors.dim() == num_batch_dims + 3
             and colors.shape[:-1] == batch_dims + (C, N)
@@ -2017,15 +2007,14 @@ def rasterization_2dgs(
     assert viewmats.shape == batch_dims + (C, 4, 4), viewmats.shape
     assert Ks.shape == batch_dims + (C, 3, 3), Ks.shape
     if distloss:
-        assert render_mode_has_depth(
-            render_mode
-        ), f"distloss requires depth rendering, but render mode is {render_mode}"
+        assert render_mode_has_depth(render_mode), (
+            f"distloss requires depth rendering, but render mode is {render_mode}"
+        )
 
     if sh_degree is None:
         # treat colors as post-activation values, should be in shape [..., N, D] or [..., C, N, D]
         assert (
-            colors.dim() == num_batch_dims + 2
-            and colors.shape[:-1] == batch_dims + (N,)
+            colors.dim() == num_batch_dims + 2 and colors.shape[:-1] == batch_dims + (N,)
         ) or (
             colors.dim() == num_batch_dims + 3
             and colors.shape[:-1] == batch_dims + (C, N)
@@ -2138,9 +2127,7 @@ def rasterization_2dgs(
         colors = torch.clamp_min(colors + 0.5, 0.0)
 
     # Rasterize to pixels
-    if render_mode_has_depth_channel(render_mode) and render_mode_has_color(
-        render_mode
-    ):
+    if render_mode_has_depth_channel(render_mode) and render_mode_has_color(render_mode):
         colors = torch.cat((colors, depths[..., None]), dim=-1)
 
         if backgrounds is not None:
@@ -2319,9 +2306,7 @@ def rasterization_2dgs_inria_wrapper(
         for i in range(0, channels, 3):
             _colors = colors[..., i : i + 3]
             if _colors.shape[-1] < 3:
-                pad = torch.zeros(
-                    _colors.shape[0], 3 - _colors.shape[-1], device=device
-                )
+                pad = torch.zeros(_colors.shape[0], 3 - _colors.shape[-1], device=device)
                 _colors = torch.cat([_colors, pad], dim=-1)
             _render_colors_, radii, allmap = rasterizer(
                 means3D=means,

@@ -32,10 +32,9 @@ References:
 """
 
 import math
-from typing import Literal, Optional, Tuple, List
+from typing import Optional, Tuple
 
 import torch
-import torch.nn.functional as F
 from torch import Tensor
 
 from gsplat._helper import assert_shape
@@ -48,8 +47,6 @@ from ._wrapper import (
 )
 from ._math import (
     _quat_to_rotmat,
-    _rotmat_to_quat,
-    _quat_inverse,
     _safe_normalize,
 )
 from ._torch_cameras import (
@@ -388,12 +385,12 @@ def _fully_fused_projection_with_ut(
     device = means.device
     dtype = means.dtype
 
-    assert (
-        dtype == torch.float32
-    ), f"CUDA uses float32, but got {dtype}. This will cause large divergences!"
-    assert (
-        viewmats.dtype == torch.float32
-    ), f"viewmats must be float32, got {viewmats.dtype}"
+    assert dtype == torch.float32, (
+        f"CUDA uses float32, but got {dtype}. This will cause large divergences!"
+    )
+    assert viewmats.dtype == torch.float32, (
+        f"viewmats must be float32, got {viewmats.dtype}"
+    )
     assert Ks.dtype == torch.float32, f"Ks must be float32, got {Ks.dtype}"
 
     # Validate camera model support
@@ -517,9 +514,7 @@ def _fully_fused_projection_with_ut(
             extend,
             # Clamp to avoid sqrt(negative).
             # Opacities < ALPHA_THRESHOLD are discarded already, no harm done.
-            torch.sqrt(
-                2.0 * torch.log(torch.clamp(opacity / ALPHA_THRESHOLD, min=1.0))
-            ),
+            torch.sqrt(2.0 * torch.log(torch.clamp(opacity / ALPHA_THRESHOLD, min=1.0))),
         )  # [B, C, N]
 
     # Compute radii with eigenvalue-based tight bounding box

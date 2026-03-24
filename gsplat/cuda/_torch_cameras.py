@@ -28,11 +28,9 @@ from typing import Optional, Tuple
 from torch import Tensor
 from gsplat._helper import assert_shape
 
-import numpy as np
 
 from ._math import (
     _numerically_stable_norm2,
-    PolynomialProxy,
     FullPolynomialProxy,
     OddPolynomialProxy,
     EvenPolynomialProxy,
@@ -48,7 +46,6 @@ from ._wrapper import (
     RollingShutterType,
     FThetaPolynomialType,
     FThetaCameraDistortionParameters,
-    SpinningDirection,
 )
 
 
@@ -287,9 +284,9 @@ class _BaseCameraModel(ABC):
             is embedded in the polynomial distortion model.
         """
         if camera_model == "lidar":
-            assert (
-                lidar_coeffs is not None
-            ), "lidar_coeffs is required for lidar camera model"
+            assert lidar_coeffs is not None, (
+                "lidar_coeffs is required for lidar camera model"
+            )
             from ._torch_lidars import _RowOffsetStructuredSpinningLidarModel
 
             return _RowOffsetStructuredSpinningLidarModel(lidar_coeffs)
@@ -297,9 +294,9 @@ class _BaseCameraModel(ABC):
         # Preconditions for non-lidar models
         assert width is not None, "width is required for non-lidar camera models"
         assert height is not None, "height is required for non-lidar camera models"
-        assert (
-            principal_points is not None
-        ), "principal_points is required for non-lidar camera models"
+        assert principal_points is not None, (
+            "principal_points is required for non-lidar camera models"
+        )
         B = principal_points.shape[:-1]
         assert_shape("principal_points", principal_points, B + (2,))
         focal_lengths is None or assert_shape("focal_lengths", focal_lengths, B + (2,))
@@ -456,25 +453,21 @@ class _BaseCameraModel(ABC):
         self,
         camera_ray: Tensor,
         margin_factor: float,
-    ) -> Tuple[Tensor, Tensor]:
-        ...
+    ) -> Tuple[Tensor, Tensor]: ...
 
     @abstractmethod
     def image_point_to_camera_ray(
         self,
         image_point: Tensor,
-    ) -> Tuple[Tensor, Tensor]:
-        ...
+    ) -> Tuple[Tensor, Tensor]: ...
 
     @property
     @abstractmethod
-    def focal_lengths(self) -> Tensor:
-        ...
+    def focal_lengths(self) -> Tensor: ...
 
     @property
     @abstractmethod
-    def principal_points(self) -> Tensor:
-        ...
+    def principal_points(self) -> Tensor: ...
 
     def image_point_to_world_ray_shutter_pose(
         self,
@@ -1352,9 +1345,9 @@ class _OpenCVFisheyeCameraModel(_BaseCameraModel):
         )  # [B, 2]
 
         # Postconditions
-        assert (
-            self.max_angle.shape == B
-        ), f"max_angle must have shape {B}, got {self.max_angle.shape}"
+        assert self.max_angle.shape == B, (
+            f"max_angle must have shape {B}, got {self.max_angle.shape}"
+        )
         assert_shape("approx_backward_poly", self.approx_backward_poly.coeffs, B + (2,))
         assert_shape("forward_poly_odd", self.forward_poly_odd.coeffs, B + (5,))
         assert_shape("dforward_poly_even", self.dforward_poly_even.coeffs, B + (5,))
@@ -1667,12 +1660,12 @@ class _FThetaCameraModel(_BaseCameraModel):
         # Preconditions
         B = principal_points.shape[:-1]
         assert_shape("principal_points", principal_points, B + (2,))
-        assert (
-            len(dist_params.pixeldist_to_angle_poly) == 6
-        ), "pixeldist_to_angle_poly must have 6 coefficients"
-        assert (
-            len(dist_params.angle_to_pixeldist_poly) == 6
-        ), "angle_to_pixeldist_poly must have 6 coefficients"
+        assert len(dist_params.pixeldist_to_angle_poly) == 6, (
+            "pixeldist_to_angle_poly must have 6 coefficients"
+        )
+        assert len(dist_params.angle_to_pixeldist_poly) == 6, (
+            "angle_to_pixeldist_poly must have 6 coefficients"
+        )
         assert len(dist_params.linear_cde) == 3, "linear_cde must have 3 coefficients"
 
         super().__init__(width, height, rs_type)
@@ -1691,9 +1684,7 @@ class _FThetaCameraModel(_BaseCameraModel):
         else:
             self.max_angle = torch.tensor(
                 [dist_params.max_angle], device=device, dtype=dtype
-            ).expand(
-                *B
-            )  # [B]
+            ).expand(*B)  # [B]
         self.linear_cde = (
             torch.tensor(dist_params.linear_cde)
             .clone()

@@ -73,9 +73,7 @@ def bilateral_grid_tv_loss(model, config):
     total_loss = 0.0
 
     for bil_grids in model.bil_grids:
-        total_loss += config.bilgrid_tv_loss_mult * total_variation_loss(
-            bil_grids.grids
-        )
+        total_loss += config.bilgrid_tv_loss_mult * total_variation_loss(bil_grids.grids)
 
     return total_loss
 
@@ -171,9 +169,7 @@ def slice(bil_grids, xy, rgb, grid_idx):
         elif len(grid_idx.shape) == 2:
             grid_idx = grid_idx[:, 0]  # (chunk_size,)
         else:
-            raise ValueError(
-                "The input to bilateral grid slicing is not supported yet."
-            )
+            raise ValueError("The input to bilateral grid slicing is not supported yet.")
 
     affine_mats = bil_grids(xy, rgb, grid_idx)
     rgb = color_affine_transform(affine_mats, rgb)

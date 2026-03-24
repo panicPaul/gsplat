@@ -160,7 +160,7 @@ class SimpleTrainer:
             )
         print(f"Total(s):\nRasterization: {times[0]:.3f}, Backward: {times[1]:.3f}")
         print(
-            f"Per step(s):\nRasterization: {times[0]/iterations:.5f}, Backward: {times[1]/iterations:.5f}"
+            f"Per step(s):\nRasterization: {times[0] / iterations:.5f}, Backward: {times[1] / iterations:.5f}"
         )
 
 

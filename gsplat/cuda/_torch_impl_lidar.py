@@ -16,8 +16,8 @@ import torch
 from torch import Tensor
 from dataclasses import dataclass
 import math
-from typing import Tuple, Union, Literal
-from ._lidar import SpinningDirection, relative_sensor_angles, SphericalUnitCoord
+from typing import Tuple
+from ._lidar import relative_sensor_angles, SphericalUnitCoord
 from ._wrapper import RowOffsetStructuredSpinningLidarModelParametersExt
 import struct
 
@@ -145,9 +145,9 @@ def _isect_tiles_lidar(
     assert depths.dtype == torch.float32
     assert lidar.tiling.n_bins_azimuth > 0, lidar.tiling.n_bins_azimuth
     assert lidar.tiling.n_bins_elevation > 0, lidar.tiling.n_bins_elevation
-    assert (
-        lidar.tiling.cdf_dense_ray_mask.dtype == torch.int32
-    ), lidar.tiling.cdf_dense_ray_mask.dtype
+    assert lidar.tiling.cdf_dense_ray_mask.dtype == torch.int32, (
+        lidar.tiling.cdf_dense_ray_mask.dtype
+    )
     assert lidar.tiling.cdf_dense_ray_mask.device == means2d.device, (
         lidar.tiling.cdf_dense_ray_mask.device,
         means2d.device,

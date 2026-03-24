@@ -20,10 +20,7 @@ This module contains reference lidar model implementations.
 import math
 import torch
 import copy
-from typing import Optional, Tuple
-from dataclasses import dataclass
 from torch import Tensor
-from gsplat._helper import assert_shape
 from ._lidar import (
     SpinningDirection,
     SphericalUnitCoord,
@@ -31,7 +28,6 @@ from ._lidar import (
     LidarModelParameters,
     StructuredLidarModelParameters,
     SpinningLidarModelParameters,
-    StructuredSpinningLidarModelParameters,
     RowOffsetStructuredSpinningLidarModelParameters,
 )
 
@@ -43,6 +39,7 @@ from ._math import (
 
 from ._torch_cameras import _BaseCameraModel
 
+
 # TODO: The hierarchy should be rooted at new class SensorModel.
 class _LidarModel:
     def __init__(self, params: LidarModelParameters) -> None:
@@ -52,9 +49,7 @@ class _LidarModel:
         params = object.__getattribute__(self, "params")
         if hasattr(params, name):
             return getattr(params, name)
-        raise AttributeError(
-            f"'{type(self).__name__}' object has no attribute '{name}'"
-        )
+        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
 
 # TODO: Since we don't have SensorModel yet, we make StructuredLidarModel inherit from _BaseCameraModel,

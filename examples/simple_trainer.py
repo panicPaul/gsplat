@@ -671,9 +671,7 @@ class Runner:
                     exposure_prior=exposure,
                 )
 
-            render_colors = (
-                torch.cat([rgb, extra], dim=-1) if extra is not None else rgb
-            )
+            render_colors = torch.cat([rgb, extra], dim=-1) if extra is not None else rgb
 
         return render_colors, render_alphas, info
 
@@ -767,9 +765,7 @@ class Runner:
             camtoworlds = camtoworlds_gt = data["camtoworld"].to(device)  # [1, 4, 4]
             Ks = data["K"].to(device)  # [1, 3, 3]
             pixels = data["image"].to(device) / 255.0  # [1, H, W, 3]
-            num_train_rays_per_step = (
-                pixels.shape[0] * pixels.shape[1] * pixels.shape[2]
-            )
+            num_train_rays_per_step = pixels.shape[0] * pixels.shape[1] * pixels.shape[2]
             image_ids = data["image_id"].to(device)
             masks = data["mask"].to(device) if "mask" in data else None  # [1, H, W]
             exposure = (
@@ -867,7 +863,7 @@ class Runner:
 
             loss.backward()
 
-            desc = f"loss={loss.item():.3f}| " f"sh degree={sh_degree_to_use}| "
+            desc = f"loss={loss.item():.3f}| sh degree={sh_degree_to_use}| "
             if cfg.depth_loss:
                 desc += f"depth loss={depthloss.item():.6f}| "
             if cfg.pose_opt and cfg.pose_noise:
@@ -933,13 +929,10 @@ class Runner:
                         data["app_module"] = self.app_module.state_dict()
                 if self.post_processing_module is not None:
                     data["post_processing"] = self.post_processing_module.state_dict()
-                torch.save(
-                    data, f"{self.ckpt_dir}/ckpt_{step}_rank{self.world_rank}.pt"
-                )
+                torch.save(data, f"{self.ckpt_dir}/ckpt_{step}_rank{self.world_rank}.pt")
             if (
                 step in [i - 1 for i in cfg.ply_steps] or step == max_steps - 1
             ) and cfg.save_ply:
-
                 if self.cfg.app_opt:
                     # eval at origin to bake the appeareance into the colors
                     rgb = self.app_module(
@@ -1171,9 +1164,7 @@ class Runner:
 
         camtoworlds_all = self.parser.camtoworlds[5:-5]
         if cfg.render_traj_path == "interp":
-            camtoworlds_all = generate_interpolated_path(
-                camtoworlds_all, 1
-            )  # [N, 3, 4]
+            camtoworlds_all = generate_interpolated_path(camtoworlds_all, 1)  # [N, 3, 4]
         elif cfg.render_traj_path == "ellipse":
             height = camtoworlds_all[:, 2, 3].mean()
             camtoworlds_all = generate_ellipse_path_z(
@@ -1342,9 +1333,7 @@ class Runner:
             if render_tab_state.inverse:
                 depth_norm = 1 - depth_norm
             renders = (
-                apply_float_colormap(depth_norm, render_tab_state.colormap)
-                .cpu()
-                .numpy()
+                apply_float_colormap(depth_norm, render_tab_state.colormap).cpu().numpy()
             )
         elif render_tab_state.render_mode == "alpha":
             alpha = render_alphas[0, ..., 0:1]

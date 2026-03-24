@@ -321,9 +321,7 @@ def _rasterize_to_pixels_2dgs(
         )
         render_colors = render_colors + renders_step * transmittances[..., None]
         render_alphas = render_alphas + accs_step * transmittances[..., None]
-        render_normals = (
-            render_normals + renders_normal_step * transmittances[..., None]
-        )
+        render_normals = render_normals + renders_normal_step * transmittances[..., None]
 
     render_alphas = render_alphas
     if backgrounds is not None:

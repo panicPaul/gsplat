@@ -157,9 +157,7 @@ def generate_all_pages():
 
 
 if __name__ == "__main__":
-    argparser = argparse.ArgumentParser(
-        description="Generate Python Wheels Index Pages"
-    )
+    argparser = argparse.ArgumentParser(description="Generate Python Wheels Index Pages")
     argparser.add_argument(
         "--outdir", help="Output directory for the index pages", default="."
     )

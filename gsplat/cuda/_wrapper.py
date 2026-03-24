@@ -16,7 +16,6 @@
 
 import math
 import warnings
-from dataclasses import dataclass
 from enum import IntEnum
 from typing import Any, Callable, Optional, Tuple
 
@@ -25,9 +24,6 @@ from torch import Tensor
 from typing_extensions import Literal
 from gsplat._helper import assert_shape
 from gsplat.cuda._lidar import (
-    SpinningDirection,
-    LidarModelParameters,
-    RowOffsetStructuredSpinningLidarModelParameters,
     RowOffsetStructuredSpinningLidarModelParametersExt as RowOffsetStructuredSpinningLidarModelParametersExtBase,
     FOV as FOVBase,
 )
@@ -44,7 +40,6 @@ def _make_lazy_cuda_func(name: str) -> Callable:
         # torch.ops.gsplat submodule.
 
         # pylint: disable=import-outside-toplevel
-        from ._backend import _C
 
         return getattr(torch.ops.gsplat, name)(*args, **kwargs)
 
@@ -152,7 +147,6 @@ class BivariateWindshieldModelParameters:
 
 
 def has_camera_wrappers():
-    from ._backend import _C
 
     # PyTorch will throw a RuntimeError if the class is not registered
     # but that's okay in this case because we're just checking if it exists
@@ -163,31 +157,26 @@ def has_camera_wrappers():
 
 
 def has_2dgs():
-    from ._backend import _C
 
     return hasattr(torch.ops.gsplat, "projection_2dgs_fused_fwd")
 
 
 def has_3dgs():
-    from ._backend import _C
 
     return hasattr(torch.ops.gsplat, "projection_ewa_simple_fwd")
 
 
 def has_3dgut():
-    from ._backend import _C
 
     return hasattr(torch.ops.gsplat, "projection_ut_3dgs_fused")
 
 
 def has_adam():
-    from ._backend import _C
 
     return hasattr(torch.ops.gsplat, "adam")
 
 
 def has_reloc():
-    from ._backend import _C
 
     return hasattr(torch.ops.gsplat, "relocation")
 
@@ -206,9 +195,9 @@ def create_camera_model(
     lidar_coeffs: Optional["RowOffsetStructuredSpinningLidarModelParametersExt"] = None,
 ):
     if camera_model == "lidar":
-        assert (
-            lidar_coeffs is not None
-        ), "lidar_coeffs is required for lidar camera model"
+        assert lidar_coeffs is not None, (
+            "lidar_coeffs is required for lidar camera model"
+        )
         RowOffsetStructuredSpinningLidarModelCUDA = _make_lazy_cuda_cls(
             "RowOffsetStructuredSpinningLidarModel"
         )
@@ -216,9 +205,9 @@ def create_camera_model(
     else:
         assert width is not None, "width is required for non-lidar camera models"
         assert height is not None, "height is required for non-lidar camera models"
-        assert (
-            principal_points is not None
-        ), "principal_points is required for non-lidar camera models"
+        assert principal_points is not None, (
+            "principal_points is required for non-lidar camera models"
+        )
         BaseCameraModelCUDA = _make_lazy_cuda_cls("BaseCameraModel")
         return BaseCameraModelCUDA.create(
             width,
@@ -449,9 +438,9 @@ def proj(
         - **Projected means**. [..., C, N, 2]
         - **Projected covariances**. [..., C, N, 2, 2]
     """
-    assert (
-        camera_model != "ftheta"
-    ), "ftheta camera is only supported via UT, please set with_ut=True in the rasterization()"
+    assert camera_model != "ftheta", (
+        "ftheta camera is only supported via UT, please set with_ut=True in the rasterization()"
+    )
 
     batch_dims = means.shape[:-3]
     C, N = means.shape[-3:-1]
@@ -574,9 +563,9 @@ def fully_fused_projection(
         assert opacities.shape == batch_dims + (N,), opacities.shape
         opacities = opacities.contiguous()
 
-    assert (
-        camera_model != "ftheta"
-    ), "ftheta camera is only supported via UT, please set with_ut=True in the rasterization()"
+    assert camera_model != "ftheta", (
+        "ftheta camera is only supported via UT, please set with_ut=True in the rasterization()"
+    )
 
     viewmats = viewmats.contiguous()
     Ks = Ks.contiguous()
@@ -891,9 +880,7 @@ def rasterize_to_pixels(
             backgrounds = torch.cat(
                 [
                     backgrounds,
-                    torch.zeros(
-                        *backgrounds.shape[:-1], padded_channels, device=device
-                    ),
+                    torch.zeros(*backgrounds.shape[:-1], padded_channels, device=device),
                 ],
                 dim=-1,
             )
@@ -901,12 +888,12 @@ def rasterize_to_pixels(
         padded_channels = 0
 
     tile_height, tile_width = isect_offsets.shape[-2:]
-    assert (
-        tile_height * tile_size >= image_height
-    ), f"Assert Failed: {tile_height} * {tile_size} >= {image_height}"
-    assert (
-        tile_width * tile_size >= image_width
-    ), f"Assert Failed: {tile_width} * {tile_size} >= {image_width}"
+    assert tile_height * tile_size >= image_height, (
+        f"Assert Failed: {tile_height} * {tile_size} >= {image_height}"
+    )
+    assert tile_width * tile_size >= image_width, (
+        f"Assert Failed: {tile_width} * {tile_size} >= {image_width}"
+    )
 
     render_colors, render_alphas = _RasterizeToPixels.apply(
         means2d.contiguous(),
@@ -1078,16 +1065,16 @@ def rasterize_to_pixels_eval3d_extra(
     assert Ks.shape == batch_dims + (C, 3, 3), Ks.shape
     if rays is not None:
         assert_shape("rays", rays, batch_dims + (C, P, 6))
-        assert (
-            rays.dtype == torch.float32
-        ), f"rays must be torch.float32, got {rays.dtype}"
+        assert rays.dtype == torch.float32, (
+            f"rays must be torch.float32, got {rays.dtype}"
+        )
 
     assert colors.ndim in (num_batch_dims + 2, num_batch_dims + 3), colors.shape
     if colors.ndim == num_batch_dims + 2:
         raise NotImplementedError("packed mode is not supported yet")
-        assert (
-            colors.shape[:-2] == batch_dims and colors.shape[-1] == channels
-        ), colors.shape
+        assert colors.shape[:-2] == batch_dims and colors.shape[-1] == channels, (
+            colors.shape
+        )
     else:
         assert colors.shape == batch_dims + (C, N, channels), colors.shape
     assert opacities.shape == colors.shape[:-1], opacities.shape
@@ -1163,9 +1150,7 @@ def rasterize_to_pixels_eval3d_extra(
             backgrounds = torch.cat(
                 [
                     backgrounds,
-                    torch.zeros(
-                        *backgrounds.shape[:-1], padded_channels, device=device
-                    ),
+                    torch.zeros(*backgrounds.shape[:-1], padded_channels, device=device),
                 ],
                 dim=-1,
             )
@@ -1180,12 +1165,12 @@ def rasterize_to_pixels_eval3d_extra(
         # hence this assert needs to be commented out.
         # assert tile_width*tile_height*lidar_coeffs.tiling.max_pts_per_tile >= lidar_coeffs.n_rows*lidar_coeffs.n_columns
     else:
-        assert (
-            tile_height * tile_size >= image_height
-        ), f"Assert Failed: {tile_height} * {tile_size} >= {image_height}"
-        assert (
-            tile_width * tile_size >= image_width
-        ), f"Assert Failed: {tile_width} * {tile_size} >= {image_width}"
+        assert tile_height * tile_size >= image_height, (
+            f"Assert Failed: {tile_height} * {tile_size} >= {image_height}"
+        )
+        assert tile_width * tile_size >= image_width, (
+            f"Assert Failed: {tile_width} * {tile_size} >= {image_width}"
+        )
 
     (
         render_colors,
@@ -1295,12 +1280,12 @@ def rasterize_to_indices_in_range(
         tile_height,
         tile_width,
     ), isect_offsets.shape
-    assert (
-        tile_height * tile_size >= image_height
-    ), f"Assert Failed: {tile_height} * {tile_size} >= {image_height}"
-    assert (
-        tile_width * tile_size >= image_width
-    ), f"Assert Failed: {tile_width} * {tile_size} >= {image_width}"
+    assert tile_height * tile_size >= image_height, (
+        f"Assert Failed: {tile_height} * {tile_size} >= {image_height}"
+    )
+    assert tile_width * tile_size >= image_width, (
+        f"Assert Failed: {tile_width} * {tile_size} >= {image_width}"
+    )
 
     out_gauss_ids, out_indices = _make_lazy_cuda_func("rasterize_to_indices_3dgs")(
         range_start,
@@ -1380,9 +1365,9 @@ class _Proj(torch.autograd.Function):
         height: int,
         camera_model: CameraModel = "pinhole",
     ) -> Tuple[Tensor, Tensor]:
-        assert (
-            camera_model != "ftheta"
-        ), "ftheta camera is only supported via UT, please set with_ut=True in the rasterization()"
+        assert camera_model != "ftheta", (
+            "ftheta camera is only supported via UT, please set with_ut=True in the rasterization()"
+        )
 
         camera_model_type = _make_lazy_cuda_obj(
             f"CameraModelType.{camera_model.upper()}"
@@ -1450,9 +1435,9 @@ class _FullyFusedProjection(torch.autograd.Function):
         camera_model: CameraModel = "pinhole",
         opacities: Optional[Tensor] = None,  # [..., N] or None
     ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
-        assert (
-            camera_model != "ftheta"
-        ), "ftheta camera is only supported via UT, please set with_ut=True in the rasterization()"
+        assert camera_model != "ftheta", (
+            "ftheta camera is only supported via UT, please set with_ut=True in the rasterization()"
+        )
 
         camera_model_type = _make_lazy_cuda_obj(
             f"CameraModelType.{camera_model.upper()}"
@@ -2094,9 +2079,9 @@ class _FullyFusedProjectionPacked(torch.autograd.Function):
         camera_model: CameraModel = "pinhole",
         opacities: Optional[Tensor] = None,  # [..., N] or None
     ) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
-        assert (
-            camera_model != "ftheta"
-        ), "ftheta camera is only supported via UT, please set with_ut=True in the rasterization()"
+        assert camera_model != "ftheta", (
+            "ftheta camera is only supported via UT, please set with_ut=True in the rasterization()"
+        )
 
         camera_model_type = _make_lazy_cuda_obj(
             f"CameraModelType.{camera_model.upper()}"
@@ -2805,21 +2790,19 @@ def rasterize_to_pixels_2dgs(
             backgrounds = torch.cat(
                 [
                     backgrounds,
-                    torch.zeros(
-                        *backgrounds.shape[:-1], padded_channels, device=device
-                    ),
+                    torch.zeros(*backgrounds.shape[:-1], padded_channels, device=device),
                 ],
                 dim=-1,
             )
     else:
         padded_channels = 0
     tile_height, tile_width = isect_offsets.shape[-2:]
-    assert (
-        tile_height * tile_size >= image_height
-    ), f"Assert Failed: {tile_height} * {tile_size} >= {image_height}"
-    assert (
-        tile_width * tile_size >= image_width
-    ), f"Assert Failed: {tile_width} * {tile_size} >= {image_width}"
+    assert tile_height * tile_size >= image_height, (
+        f"Assert Failed: {tile_height} * {tile_size} >= {image_height}"
+    )
+    assert tile_width * tile_size >= image_width, (
+        f"Assert Failed: {tile_width} * {tile_size} >= {image_width}"
+    )
 
     (
         render_colors,
@@ -2913,12 +2896,12 @@ def rasterize_to_indices_in_range_2dgs(
         tile_height,
         tile_width,
     ), isect_offsets.shape
-    assert (
-        tile_height * tile_size >= image_height
-    ), f"Assert Failed: {tile_height} * {tile_size} >= {image_height}"
-    assert (
-        tile_width * tile_size >= image_width
-    ), f"Assert Failed: {tile_width} * {tile_size} >= {image_width}"
+    assert tile_height * tile_size >= image_height, (
+        f"Assert Failed: {tile_height} * {tile_size} >= {image_height}"
+    )
+    assert tile_width * tile_size >= image_width, (
+        f"Assert Failed: {tile_width} * {tile_size} >= {image_width}"
+    )
 
     out_gauss_ids, out_indices = _make_lazy_cuda_func("rasterize_to_indices_2dgs")(
         range_start,

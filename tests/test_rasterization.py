@@ -51,8 +51,7 @@ device = torch.device("cuda:0")
                     reason="3DGUT support isn't built in",
                 ),
                 pytest.mark.skipif(
-                    (params[5] == False or params[6] == False)
-                    and not gsplat.has_3dgs(),
+                    (params[5] == False or params[6] == False) and not gsplat.has_3dgs(),
                     reason="3DGS support isn't built in",
                 ),
             ],
@@ -136,9 +135,7 @@ def test_rasterization(
         if sh_degree is None:
             colors = torch.rand(batch_dims + (N, 3), device=device)
         else:
-            colors = torch.rand(
-                batch_dims + (N, (sh_degree + 1) ** 2, 3), device=device
-            )
+            colors = torch.rand(batch_dims + (N, (sh_degree + 1) ** 2, 3), device=device)
 
     if extra_signals_info is None:
         extra_signals_sh_degree = None

@@ -30,7 +30,6 @@ from torch import Tensor
 import torch
 
 from ._math import (
-    _numerically_stable_norm2,
     _quat_inverse,
     _quat_to_rotmat,
     _safe_normalize,
@@ -207,9 +206,9 @@ def _compute_gaussian_alphas(
     max_response = torch.exp(power)
     alphas = torch.clamp(opac * max_response, max=max_alpha)
 
-    assert torch.all(
-        (alphas >= 0) & (alphas <= 1.0)
-    ), f"Invalid alphas: range=[{alphas.min()}, {alphas.max()}]"
+    assert torch.all((alphas >= 0) & (alphas <= 1.0)), (
+        f"Invalid alphas: range=[{alphas.min()}, {alphas.max()}]"
+    )
 
     return alphas, max_response
 
@@ -390,9 +389,7 @@ def accumulate_eval3d(
 
     # 9. Filter out low-contribution Gaussians (explicit masking)
     # CUDA: if (alpha < 1.f / 255.f) continue;
-    valid_mask = (alphas >= ALPHA_THRESHOLD) & (
-        max_response > MAX_KERNEL_DENSITY_CUTOFF
-    )
+    valid_mask = (alphas >= ALPHA_THRESHOLD) & (max_response > MAX_KERNEL_DENSITY_CUTOFF)
 
     # Apply filter to all arrays early to reduce memory usage
     alphas = alphas[valid_mask]
@@ -408,9 +405,9 @@ def accumulate_eval3d(
     total_pixels = I * image_height * image_width
 
     # CRITICAL: Verify ray indices are sorted (required for packed_info)
-    assert torch.all(
-        ray_indices[1:] >= ray_indices[:-1]
-    ), "indices must be sorted for packed_info"
+    assert torch.all(ray_indices[1:] >= ray_indices[:-1]), (
+        "indices must be sorted for packed_info"
+    )
 
     # Create packed_info for nerfacc (more memory efficient than ray_indices)
     from nerfacc import pack_info
@@ -565,11 +562,6 @@ def _rasterize_to_pixels_eval3d(
         - Various combinations if multiple flags are True
         The order is always: colors, alphas, [last_ids], [sample_counts], [normals]
     """
-    from ._wrapper import (
-        rasterize_to_indices_in_range,
-        fully_fused_projection,
-        quat_scale_to_covar_preci,
-    )
 
     # Get dimensions - treat [..., C, N, ...] as flattened images
     batch_dims = means.shape[:-2]
@@ -713,9 +705,7 @@ def _rasterize_to_pixels_eval3d(
                         torch.arange(px_start, px_end, device=device),
                         indexing="ij",
                     )
-                    pix_ids_in_tile = (
-                        py_grid.flatten() * image_width + px_grid.flatten()
-                    )
+                    pix_ids_in_tile = py_grid.flatten() * image_width + px_grid.flatten()
                     num_pixels = len(pix_ids_in_tile)
 
                     # Create flatten_ids indices for this batch
@@ -805,9 +795,7 @@ def _rasterize_to_pixels_eval3d(
     render_colors = render_colors.reshape(
         batch_dims + (C, image_height, image_width, channels)
     )
-    render_alphas = render_alphas.reshape(
-        batch_dims + (C, image_height, image_width, 1)
-    )
+    render_alphas = render_alphas.reshape(batch_dims + (C, image_height, image_width, 1))
     last_ids = last_ids.reshape(batch_dims + (C, image_height, image_width))
     sample_counts = sample_counts.reshape(batch_dims + (C, image_height, image_width))
     if render_normals is not None:

@@ -90,9 +90,9 @@ def all_to_all_int32(
     if world_size == 1:
         return values
 
-    assert (
-        len(values) == world_size
-    ), "The length of values should be equal to world_size"
+    assert len(values) == world_size, (
+        "The length of values should be equal to world_size"
+    )
 
     if any(isinstance(v, int) for v in values):
         assert device is not None, "device is required for scalar input"
@@ -236,9 +236,9 @@ def all_to_all_tensor_list(
     for tensor in tensor_list:
         assert len(tensor) == N, "All tensors should have the same first dimension size"
 
-    assert (
-        len(splits) == world_size
-    ), "The length of splits should be equal to world_size"
+    assert len(splits) == world_size, (
+        "The length of splits should be equal to world_size"
+    )
 
     # concatenate tensors and record their sizes
     data = torch.cat([t.reshape(N, -1) for t in tensor_list], dim=-1)
@@ -339,9 +339,7 @@ def cli(fn: Callable, args: Any, verbose: bool = False) -> bool:
         local_rank = int(os.environ["OMPI_COMM_WORLD_LOCAL_RANK"])
         world_size = int(os.environ["OMPI_COMM_WORLD_SIZE"])  # dist.get_world_size()
         world_rank = int(os.environ["OMPI_COMM_WORLD_RANK"])  # dist.get_rank()
-        return _distributed_worker(
-            world_rank, world_size, fn, args, local_rank, verbose
-        )
+        return _distributed_worker(world_rank, world_size, fn, args, local_rank, verbose)
 
     world_size = torch.cuda.device_count()
     distributed = world_size > 1

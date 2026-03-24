@@ -542,9 +542,7 @@ class Runner:
             camtoworlds = camtoworlds_gt = data["camtoworld"].to(device)  # [1, 4, 4]
             Ks = data["K"].to(device)  # [1, 3, 3]
             pixels = data["image"].to(device) / 255.0  # [1, H, W, 3]
-            num_train_rays_per_step = (
-                pixels.shape[0] * pixels.shape[1] * pixels.shape[2]
-            )
+            num_train_rays_per_step = pixels.shape[0] * pixels.shape[1] * pixels.shape[2]
             image_ids = data["image_id"].to(device)
             if cfg.depth_loss:
                 points = data["points"].to(device)  # [1, M, 2]
@@ -654,7 +652,7 @@ class Runner:
 
             loss.backward()
 
-            desc = f"loss={loss.item():.3f}| " f"sh degree={sh_degree_to_use}| "
+            desc = f"loss={loss.item():.3f}| sh degree={sh_degree_to_use}| "
             if cfg.depth_loss:
                 desc += f"depth loss={depthloss.item():.6f}| "
             if cfg.dist_loss:
@@ -1004,9 +1002,7 @@ class Runner:
             if render_tab_state.inverse:
                 depth_norm = 1 - depth_norm
             renders = (
-                apply_float_colormap(depth_norm, render_tab_state.colormap)
-                .cpu()
-                .numpy()
+                apply_float_colormap(depth_norm, render_tab_state.colormap).cpu().numpy()
             )
         elif render_tab_state.render_mode == "normal":
             render_normals = render_normals * 0.5 + 0.5  # normalize to [0, 1]

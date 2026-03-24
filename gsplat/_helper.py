@@ -117,9 +117,9 @@ def get_inlier_abserror_mask(actual, expected, *, quantile=None, atol=None, rtol
         Boolean mask same shape as inputs, True for inliers (values within all specified thresholds)
     """
     # Validate arguments
-    assert (
-        rtol is None or atol is not None
-    ), "If rtol is specified, atol must also be specified"
+    assert rtol is None or atol is not None, (
+        "If rtol is specified, atol must also be specified"
+    )
 
     abs_diff = (actual - expected).abs()
 
@@ -207,6 +207,6 @@ def assert_mismatch_ratio(actual, expected, *, max=1e-5):
     mismatch = (actual != expected).sum().item()
     total = expected.numel()
     mismatch_ratio = mismatch / total if total > 0 else 1
-    assert (
-        mismatch_ratio <= max
-    ), f"Too many validity mismatches: {mismatch}/{total} ({mismatch_ratio*100:.2f}%) "
+    assert mismatch_ratio <= max, (
+        f"Too many validity mismatches: {mismatch}/{total} ({mismatch_ratio * 100:.2f}%) "
+    )

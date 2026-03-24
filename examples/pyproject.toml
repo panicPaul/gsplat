@@ -1,0 +1,38 @@
+[project]
+name = "gsplat-examples"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "viser>=1.0.24",
+    "imageio[ffmpeg]>=2.37.3",
+    "scikit-learn>=1.8.0",
+    "tqdm>=4.67.3",
+    "torchmetrics[image]>=1.9.0",
+    "opencv-python>=4.11.0.86",
+    "tyro>=0.8.8",
+    "pillow>=12.1.1",
+    "piexif>=1.1.3",
+    "tensorboard>=2.20.0",
+    "tensorly>=0.9.0",
+    "pyyaml>=6.0.3",
+    "matplotlib>=3.10.8",
+    "splines>=0.3.3",
+    "nerfacc>=0.5.3,<0.6",
+    "pycolmap>=4.0.2,<5",
+    "nerfview",
+    "fused-ssim",
+    "fused-bilagrid",
+    "ppisp==1.0.0",
+]
+
+[tool.uv.sources]
+nerfview = { git = "https://github.com/nerfstudio-project/nerfview", rev = "4538024fe0d15fd1a0e4d760f3695fc44ca72787" }
+fused-ssim = { git = "https://github.com/rahul-goel/fused-ssim" }
+fused-bilagrid = { git = "https://github.com/harry7557558/fused-bilagrid" }
+ppisp = { git = "https://github.com/nv-tlabs/ppisp" }
+
+[tool.uv.extra-build-dependencies]
+fused-ssim = ["torch", "setuptools"]
+fused-bilagrid = ["torch", "setuptools"]
+nerfview = ["torch", "setuptools"]
+ppisp = ["torch", "setuptools"]

@@ -16,14 +16,12 @@ from torch import Tensor
 import hashlib
 import math
 from functools import lru_cache
-from dataclasses import dataclass, field, InitVar
+from dataclasses import dataclass, InitVar
 from enum import Enum
 from types import SimpleNamespace
-from typing import Optional
 
 import numpy as np
 import torch
-from typing_extensions import override
 
 
 def _tensor_hash(tensor: Tensor) -> int:
@@ -301,13 +299,11 @@ class RowOffsetStructuredSpinningLidarModelParameters(
             self.row_elevations_rad,
             SpinningDirection.CLOCKWISE,
         )
+        assert torch.all(torch.diff(relative_row_elevations_rad) > 0), (
+            "Row elevation angles must be sorted in descending order (cw)"
+        )
         assert torch.all(
-            torch.diff(relative_row_elevations_rad) > 0
-        ), "Row elevation angles must be sorted in descending order (cw)"
-        assert torch.all(
-            ~angle_range_wrap_around(
-                self.row_elevations_rad[0], self.row_elevations_rad
-            )
+            ~angle_range_wrap_around(self.row_elevations_rad[0], self.row_elevations_rad)
         ), "Row elevation angles must not wrap around the start element"
 
         # Check order of column azimuth angles is consistent with spinning direction
@@ -317,15 +313,17 @@ class RowOffsetStructuredSpinningLidarModelParameters(
             self.spinning_direction,
         )
 
-        assert torch.all(
-            torch.diff(relative_column_azimuths_rad) > 0
-        ), "Column azimuth angles must be sorted in the spinning direction so the diff between relative angles of consecutive columns should always be positive"
+        assert torch.all(torch.diff(relative_column_azimuths_rad) > 0), (
+            "Column azimuth angles must be sorted in the spinning direction so the diff between relative angles of consecutive columns should always be positive"
+        )
 
         assert torch.all(
             ~angle_range_wrap_around(
                 self.column_azimuths_rad[0], self.column_azimuths_rad
             )
-        ), "Column azimuth angles (without offsets) must not wrap around the start element"
+        ), (
+            "Column azimuth angles (without offsets) must not wrap around the start element"
+        )
 
     @property
     def device(self):
@@ -364,9 +362,7 @@ class RowOffsetStructuredSpinningLidarModelParameters(
         Flat order is row-major (flat_idx = row * n_columns + col)
         """
         idxelevations = torch.arange(self.n_rows, device=self.device, dtype=torch.int32)
-        idxazimuths = torch.arange(
-            self.n_columns, device=self.device, dtype=torch.int32
-        )
+        idxazimuths = torch.arange(self.n_columns, device=self.device, dtype=torch.int32)
 
         return SphericalUnitCoord(
             elevation=torch.repeat_interleave(idxelevations, self.n_columns),
@@ -449,17 +445,17 @@ class LidarTiling:
     def __post_init__(self):
         assert self.cdf_elevation.dtype == torch.int32, self.cdf_elevation.dtype
         assert self.cdf_elevation.ndim == 1, f"{self.cdf_elevation.shape=}"
-        assert (
-            self.cdf_elevation[-1].item() == self.n_bins_elevation
-        ), "cdf_elevation[-1] must be equal to n_bins_elevation"
+        assert self.cdf_elevation[-1].item() == self.n_bins_elevation, (
+            "cdf_elevation[-1] must be equal to n_bins_elevation"
+        )
 
-        assert (
-            self.cdf_dense_ray_mask.dtype == torch.int32
-        ), self.cdf_dense_ray_mask.dtype
+        assert self.cdf_dense_ray_mask.dtype == torch.int32, (
+            self.cdf_dense_ray_mask.dtype
+        )
         assert self.cdf_dense_ray_mask.ndim == 2, self.cdf_dense_ray_mask.ndim
-        assert (
-            self.cdf_dense_ray_mask.shape[-1] == self.cdf_elevation.shape[0]
-        ), f"{self.cdf_dense_ray_mask.shape=} {self.cdf_elevation.shape=}"
+        assert self.cdf_dense_ray_mask.shape[-1] == self.cdf_elevation.shape[0], (
+            f"{self.cdf_dense_ray_mask.shape=} {self.cdf_elevation.shape=}"
+        )
 
         assert self.tiles_pack_info.ndim == 2, self.tiles_pack_info.ndim
         assert self.tiles_pack_info.shape == (
@@ -469,9 +465,9 @@ class LidarTiling:
         assert self.tiles_pack_info.dtype == torch.int32, self.tiles_pack_info.dtype
 
         assert self.tiles_to_elements_map.ndim == 2, self.tiles_to_elements_map.ndim
-        assert (
-            self.tiles_to_elements_map.dtype == torch.int32
-        ), self.tiles_to_elements_map.dtype
+        assert self.tiles_to_elements_map.dtype == torch.int32, (
+            self.tiles_to_elements_map.dtype
+        )
 
         # TODO: These asserts are important, but we don't have the needed variables at this point.
         # These checks need improvement.
@@ -617,13 +613,13 @@ def compute_angles_to_columns_map(
     # The lidar (unitary) ray chosen is the one closest (L^2)
     # to the top-left corner of the grid cell, when 'un-projected' to an unitary ray.
 
-    assert (
-        torch.iinfo(dtype).max >= lidar.n_columns - 1
-    ), "The dtype for the angles to columns map must be able to store the maximum column index, consider increasing angles_to_columns_map_dtype"
+    assert torch.iinfo(dtype).max >= lidar.n_columns - 1, (
+        "The dtype for the angles to columns map must be able to store the maximum column index, consider increasing angles_to_columns_map_dtype"
+    )
 
-    assert (
-        not dtype.is_floating_point and not dtype.is_complex
-    ), "The dtype for the angles to columns map must be an integer type"
+    assert not dtype.is_floating_point and not dtype.is_complex, (
+        "The dtype for the angles to columns map must be an integer type"
+    )
 
     # Create regular, high-density angle grid spanning the sensor's FOV.
     grid_elevations_rad, grid_azimuths_rad = torch.meshgrid(
@@ -657,9 +653,9 @@ def compute_angles_to_columns_map(
     # This needs to be fixed.
     grid_rays = sensor_angles_to_rays(lidar, grid_angles)
 
-    assert torch.all(
-        grid_rays.valid_flag
-    ), "Bug: grid rays must be valid in the FOV of the sensor"
+    assert torch.all(grid_rays.valid_flag), (
+        "Bug: grid rays must be valid in the FOV of the sensor"
+    )
 
     # Compute a column-major list of all sensor coordinates
     elements = lidar.create_elements()
@@ -670,9 +666,9 @@ def compute_angles_to_columns_map(
     # Now convert the sensor angles to unit rays.
     sensor_rays = sensor_angles_to_rays(lidar, sensor_angles)
 
-    assert torch.all(
-        sensor_rays.valid_flag
-    ), "Bug: sensor rays must be valid in the FOV of the sensor"
+    assert torch.all(sensor_rays.valid_flag), (
+        "Bug: sensor rays must be valid in the FOV of the sensor"
+    )
 
     # Compute the NN of each grid ray in the sensor rays
     # TODO: this is quite slow and should be moved to CUDA.
@@ -680,9 +676,7 @@ def compute_angles_to_columns_map(
     #       and usually this function would be called only once per lidar model needed.
     from scipy import spatial as scipy_spatial  # requires pip install gsplat[lidar]
 
-    kdtree = scipy_spatial.cKDTree(
-        sensor_rays.sensor_rays.contiguous().cpu().numpy()
-    )  # ty:ignore[unresolved-attribute]
+    kdtree = scipy_spatial.cKDTree(sensor_rays.sensor_rays.contiguous().cpu().numpy())  # ty:ignore[unresolved-attribute]
     _, idxs = kdtree.query(grid_rays.sensor_rays.contiguous().cpu().numpy())
     idxs = torch.from_numpy(idxs).to(device=lidar.device, dtype=torch.int32)
 
@@ -758,9 +752,7 @@ def angles_to_tile_indices(
 
     normalized_angles = SphericalUnitCoord(
         elevation=relative_angles.elevation / parameters.fov_vert_rad.span * resolution,
-        azimuth=relative_angles.azimuth
-        / parameters.fov_horiz_rad.span
-        * n_bins_azimuth,
+        azimuth=relative_angles.azimuth / parameters.fov_horiz_rad.span * n_bins_azimuth,
     )
 
     # compute the azimuth tile indices directly
@@ -852,11 +844,15 @@ def compute_histogram_equalization(
     assert torch.all(
         (angles.elevation >= ranges_elevation[0])
         & (angles.elevation <= ranges_elevation[1])
-    ), f"elevations are out of bounds, {angles.elevation.min()} < {ranges_elevation[0]},  {angles.elevation.max()} > {ranges_elevation[1]}"
+    ), (
+        f"elevations are out of bounds, {angles.elevation.min()} < {ranges_elevation[0]},  {angles.elevation.max()} > {ranges_elevation[1]}"
+    )
 
     assert torch.all(
         (angles.azimuth >= ranges_azimuth[0]) & (angles.azimuth <= ranges_azimuth[1])
-    ), f"azimuths are out of bounds, {angles.azimuth.min()} < {ranges_azimuth[0]},  {angles.azimuth.max()} > {ranges_azimuth[1]}"
+    ), (
+        f"azimuths are out of bounds, {angles.azimuth.min()} < {ranges_azimuth[0]},  {angles.azimuth.max()} > {ranges_azimuth[1]}"
+    )
 
     # --------------------------------
     # Histogram Equalization
@@ -921,12 +917,12 @@ def compute_histogram_equalization(
         hist2d, _, _ = compute_hist2d(n_bins_azimuth)
 
     assert isinstance(cdf_elevation, torch.Tensor)
-    assert (
-        cdf_elevation[-1].item() == n_bins_elevation
-    ), f"{cdf_elevation[-1]=} {n_bins_elevation=}"
-    assert cdf_elevation.shape == (
-        resolution_elevation + 1,
-    ), f"{cdf_elevation.shape=} {(resolution_elevation+1,)=}"
+    assert cdf_elevation[-1].item() == n_bins_elevation, (
+        f"{cdf_elevation[-1]=} {n_bins_elevation=}"
+    )
+    assert cdf_elevation.shape == (resolution_elevation + 1,), (
+        f"{cdf_elevation.shape=} {(resolution_elevation+1,)=}"
+    )
 
     return (
         n_bins_azimuth,
@@ -944,7 +940,10 @@ def compute_tiling(
     params = SimpleNamespace()
     params.n_bins_elevation = n_bins_elevation
 
-    (params.n_bins_azimuth, params.cdf_elevation,) = compute_histogram_equalization(
+    (
+        params.n_bins_azimuth,
+        params.cdf_elevation,
+    ) = compute_histogram_equalization(
         lidar_params,
         n_bins_elevation=n_bins_elevation,
         max_pts_per_tile=max_pts_per_tile,

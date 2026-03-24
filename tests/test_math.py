@@ -63,7 +63,7 @@ def test_quat_normalize_rotation():
     l2 = torch.linalg.norm(nqs, dim=-1)
     torch.testing.assert_close(l2, torch.ones_like(l2))
     # All output w > 0
-    assert (nqs[:, 0] > 0).all(), f"Output w components: {nqs[:,0]}"
+    assert (nqs[:, 0] > 0).all(), f"Output w components: {nqs[:, 0]}"
 
     # Test 5: Edge case, zeros (should return identity quaternion [1,0,0,0])
     q_zeros = torch.zeros(1, 4, device=device)
@@ -127,9 +127,7 @@ def test_quat_to_rotmat():
     torch.testing.assert_close(det, torch.ones_like(det))
 
     # Gradient check - concatenate all forward test inputs
-    q_grad = (
-        torch.cat([q_identity, q_x180, q_rand], dim=0).double().requires_grad_(True)
-    )
+    q_grad = torch.cat([q_identity, q_x180, q_rand], dim=0).double().requires_grad_(True)
     assert torch.autograd.gradcheck(
         lambda x: _quat_to_rotmat(F.normalize(x, p=2, dim=-1)),
         q_grad,
@@ -364,9 +362,7 @@ def test_quat_slerp():
     import math as m
 
     angle = m.pi / 4  # 45 degrees in radians
-    q_p45 = torch.tensor(
-        [[m.cos(angle / 2), 0.0, 0.0, m.sin(angle / 2)]], device=device
-    )
+    q_p45 = torch.tensor([[m.cos(angle / 2), 0.0, 0.0, m.sin(angle / 2)]], device=device)
     q_m45 = torch.tensor(
         [[m.cos(-angle / 2), 0.0, 0.0, m.sin(-angle / 2)]], device=device
     )

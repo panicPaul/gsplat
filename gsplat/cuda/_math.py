@@ -616,9 +616,9 @@ def _quat_slerp(x: Tensor, y: Tensor, t: Tensor) -> Tensor:
     # Check if any quaternions need slerp (are not close)
     if (cosTheta <= threshold).any():
         theta = torch.acos(cosTheta)
-        assert (
-            theta.isfinite().all()
-        ), f"cosTheta ∈ [{cosTheta.min().item(),cosTheta.max().item()}]"
+        assert theta.isfinite().all(), (
+            f"cosTheta ∈ [{cosTheta.min().item(), cosTheta.max().item()}]"
+        )
 
         sinTheta = torch.sin(theta)
         resultSlerp = (

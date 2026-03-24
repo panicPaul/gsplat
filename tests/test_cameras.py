@@ -171,9 +171,7 @@ def parse_camera(
         # Wrap lidar-specific params into a RowOffsetStructuredSpinningLidarModelParametersExt object
         return {
             "camera_model": model_type,
-            "lidar_coeffs": RowOffsetStructuredSpinningLidarModelParametersExt(
-                **params
-            ),
+            "lidar_coeffs": RowOffsetStructuredSpinningLidarModelParametersExt(**params),
         }
     else:
         resolution = torch.tensor([width, height], dtype=torch.float32).cuda()
@@ -263,9 +261,7 @@ def parse_opencv_fisheye_camera(
     if k_match := re.search(r"k(\d+)", param_str):
         n_radial = int(k_match.group(1))
 
-    radial_coeffs = (
-        torch.randn(*batch_dims, n_radial, dtype=torch.float32).cuda() * 0.01
-    )
+    radial_coeffs = torch.randn(*batch_dims, n_radial, dtype=torch.float32).cuda() * 0.01
 
     return {
         "focal_lengths": focal_lengths,
@@ -436,7 +432,7 @@ def parse_lidar_camera(
             elevation_end,
             n_rows,
             dtype=torch.float32,
-            device=device
+            device=device,
             # Add small noise, but make sure it's not larger than the spacing between each row.
         )
         + (torch.rand(n_rows, dtype=torch.float32, device=device) - 0.5)

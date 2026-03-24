@@ -116,9 +116,7 @@ def main(local_rank: int, world_rank, world_size: int, args):
             if render_tab_state.inverse:
                 depth_norm = 1 - depth_norm
             renders = (
-                apply_float_colormap(depth_norm, render_tab_state.colormap)
-                .cpu()
-                .numpy()
+                apply_float_colormap(depth_norm, render_tab_state.colormap).cpu().numpy()
             )
         elif render_tab_state.render_mode == "normal":
             render_normals = render_normals * 0.5 + 0.5  # normalize to [0, 1]

@@ -90,9 +90,9 @@ class Parser:
         colmap_dir = os.path.join(data_dir, "sparse/0/")
         if not os.path.exists(colmap_dir):
             colmap_dir = os.path.join(data_dir, "sparse")
-        assert os.path.exists(
-            colmap_dir
-        ), f"COLMAP directory {colmap_dir} does not exist."
+        assert os.path.exists(colmap_dir), (
+            f"COLMAP directory {colmap_dir} does not exist."
+        )
 
         manager = SceneManager(colmap_dir)
         manager.load_cameras()
@@ -146,16 +146,14 @@ class Parser:
             elif type_ == 5 or type_ == "OPENCV_FISHEYE":
                 params = np.array([cam.k1, cam.k2, cam.k3, cam.k4], dtype=np.float32)
                 camtype = "fisheye"
-            assert (
-                camtype == "perspective" or camtype == "fisheye"
-            ), f"Only perspective and fisheye cameras are supported, got {type_}"
+            assert camtype == "perspective" or camtype == "fisheye", (
+                f"Only perspective and fisheye cameras are supported, got {type_}"
+            )
 
             params_dict[camera_id] = params
             imsize_dict[camera_id] = (cam.width // factor, cam.height // factor)
             mask_dict[camera_id] = None
-        print(
-            f"[Parser] {len(imdata)} images, taken by {len(set(camera_ids))} cameras."
-        )
+        print(f"[Parser] {len(imdata)} images, taken by {len(set(camera_ids))} cameras.")
 
         if len(imdata) == 0:
             raise ValueError("No images found in COLMAP.")
@@ -333,9 +331,9 @@ class Parser:
             if len(params) == 0:
                 continue  # no distortion
             assert camera_id in self.Ks_dict, f"Missing K for camera {camera_id}"
-            assert (
-                camera_id in self.params_dict
-            ), f"Missing params for camera {camera_id}"
+            assert camera_id in self.params_dict, (
+                f"Missing params for camera {camera_id}"
+            )
             K = self.Ks_dict[camera_id]
             width, height = self.imsize_dict[camera_id]
 

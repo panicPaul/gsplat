@@ -270,9 +270,7 @@ def test_fully_fused_projection_packed_2dgs(
 @pytest.mark.skipif(not gsplat.has_2dgs(), reason="2DGS support wasn't built")
 @pytest.mark.parametrize("channels", [3, 31])
 @pytest.mark.parametrize("batch_dims", [(), (2,), (1, 2)])
-def test_rasterize_to_pixels_2dgs(
-    test_data, channels: int, batch_dims: Tuple[int, ...]
-):
+def test_rasterize_to_pixels_2dgs(test_data, channels: int, batch_dims: Tuple[int, ...]):
     from gsplat.cuda._torch_impl_2dgs import _rasterize_to_pixels_2dgs
     from gsplat.cuda._wrapper import (
         fully_fused_projection_2dgs,
@@ -330,7 +328,13 @@ def test_rasterize_to_pixels_2dgs(
     normals.requires_grad = True
     densify.requires_grad = True
 
-    (render_colors, render_alphas, render_normals, _, _,) = rasterize_to_pixels_2dgs(
+    (
+        render_colors,
+        render_alphas,
+        render_normals,
+        _,
+        _,
+    ) = rasterize_to_pixels_2dgs(
         means2d,
         ray_transforms,
         colors,
@@ -399,9 +403,7 @@ def test_rasterize_to_pixels_2dgs(
 
     # assert close backward
     torch.testing.assert_close(v_means2d, _v_means2d, rtol=1e-3, atol=1e-3)
-    torch.testing.assert_close(
-        v_ray_transforms, _v_ray_transforms, rtol=2e-1, atol=5e-2
-    )
+    torch.testing.assert_close(v_ray_transforms, _v_ray_transforms, rtol=2e-1, atol=5e-2)
     torch.testing.assert_close(v_colors, _v_colors, rtol=1e-3, atol=1e-3)
     torch.testing.assert_close(v_opacities, _v_opacities, rtol=1e-3, atol=1e-3)
     torch.testing.assert_close(v_backgrounds, _v_backgrounds, rtol=1e-5, atol=1e-5)

@@ -13,10 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
 from typing import Tuple
 
-import torch
 from torch import Tensor
 
 from .cuda._wrapper import _make_lazy_cuda_func

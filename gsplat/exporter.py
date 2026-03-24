@@ -13,8 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import math
-import struct
 from io import BytesIO
 from typing import Literal, Optional
 
@@ -23,7 +23,7 @@ import torch
 
 
 def sh2rgb(sh: torch.Tensor) -> torch.Tensor:
-    """Convert Sphere Harmonics to RGB
+    """Convert Sphere Harmonics to RGB.
 
     Args:
         sh (torch.Tensor): SH tensor
@@ -36,7 +36,7 @@ def sh2rgb(sh: torch.Tensor) -> torch.Tensor:
 
 
 def part1by2_vec(x: torch.Tensor) -> torch.Tensor:
-    """Interleave bits of x with 0s
+    """Interleave bits of x with 0s.
 
     Args:
         x (torch.Tensor): Input tensor. Shape (N,)
@@ -44,7 +44,6 @@ def part1by2_vec(x: torch.Tensor) -> torch.Tensor:
     Returns:
         torch.Tensor: Output tensor. Shape (N,)
     """
-
     x = x & 0x000003FF
     x = (x ^ (x << 16)) & 0xFF0000FF
     x = (x ^ (x << 8)) & 0x0300F00F
@@ -56,12 +55,13 @@ def part1by2_vec(x: torch.Tensor) -> torch.Tensor:
 def encode_morton3_vec(
     x: torch.Tensor, y: torch.Tensor, z: torch.Tensor
 ) -> torch.Tensor:
-    """Compute Morton codes for 3D coordinates
+    """Compute Morton codes for 3D coordinates.
 
     Args:
         x (torch.Tensor): X coordinates. Shape (N,)
         y (torch.Tensor): Y coordinates. Shape (N,)
         z (torch.Tensor): Z coordinates. Shape (N,)
+
     Returns:
         torch.Tensor: Morton codes. Shape (N,)
     """
@@ -69,11 +69,12 @@ def encode_morton3_vec(
 
 
 def sort_centers(centers: torch.Tensor, indices: torch.Tensor) -> torch.Tensor:
-    """Sort centers based on Morton codes
+    """Sort centers based on Morton codes.
 
     Args:
         centers (torch.Tensor): Centers. Shape (N, 3)
         indices (torch.Tensor): Indices. Shape (N,)
+
     Returns:
         torch.Tensor: Sorted indices. Shape (N,)
     """
@@ -86,7 +87,9 @@ def sort_centers(centers: torch.Tensor, indices: torch.Tensor) -> torch.Tensor:
     lengths[lengths == 0] = 1  # Prevent division by zero
 
     # Normalize and scale to 10-bit integer range (0-1024)
-    scaled_centers = ((centers - min_vals) / lengths * 1024).floor().to(torch.int32)
+    scaled_centers = (
+        ((centers - min_vals) / lengths * 1024).floor().to(torch.int32)
+    )
 
     # Extract x, y, z coordinates
     x, y, z = scaled_centers[:, 0], scaled_centers[:, 1], scaled_centers[:, 2]
@@ -110,20 +113,22 @@ def pack_unorm(value: torch.Tensor, bits: int) -> torch.Tensor:
     Returns:
         torch.Tensor: Packed value. Shape (N,)
     """
-
     t = (1 << bits) - 1
     packed = torch.clamp((value * t + 0.5).floor(), min=0, max=t)
     # Convert to integer type
     return packed.to(torch.int64)
 
 
-def pack_111011(x: torch.Tensor, y: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
+def pack_111011(
+    x: torch.Tensor, y: torch.Tensor, z: torch.Tensor
+) -> torch.Tensor:
     """Pack three floating point values into a 32-bit integer with 11, 10, and 11 bits.
 
     Args:
         x (torch.Tensor): X component. Shape (N,)
         y (torch.Tensor): Y component. Shape (N,)
         z (torch.Tensor): Z component. Shape (N,)
+
     Returns:
         torch.Tensor: Packed values. Shape (N,)
     """
@@ -146,6 +151,7 @@ def pack_8888(
         y (torch.Tensor): Y component. Shape (N,)
         z (torch.Tensor): Z component. Shape (N,)
         w (torch.Tensor): W component. Shape (N,)
+
     Returns:
         torch.Tensor: Packed values. Shape (N,)
     """
@@ -168,7 +174,6 @@ def pack_rotation(q: torch.Tensor) -> torch.Tensor:
     Returns:
         torch.Tensor: Packed values. Shape (N,)
     """
-
     # Normalize each quaternion
     norms = torch.linalg.norm(q, dim=-1, keepdim=True)
     q = q / norms
@@ -184,7 +189,9 @@ def pack_rotation(q: torch.Tensor) -> torch.Tensor:
 
     # Precomputed indices for the components to pack (excluding largest)
     precomputed_indices = torch.tensor(
-        [[1, 2, 3], [0, 2, 3], [0, 1, 3], [0, 1, 2]], dtype=torch.long, device=q.device
+        [[1, 2, 3], [0, 2, 3], [0, 1, 3], [0, 1, 2]],
+        dtype=torch.long,
+        device=q.device,
     )
 
     # Gather components to pack for each quaternion
@@ -329,32 +336,42 @@ def splat2ply_bytes_compressed(
         chunk_quats = quats[splat_idxs]
         quat_i = pack_rotation(chunk_quats)
         # Scales
-        normalized_scales = (chunk_scales - min_scales) / (max_scales - min_scales)
+        normalized_scales = (chunk_scales - min_scales) / (
+            max_scales - min_scales
+        )
         scales_i = pack_111011(
             normalized_scales[:, 0],
             normalized_scales[:, 1],
             normalized_scales[:, 2],
         )
         # Colors
-        normalized_colors = (chunk_colors - min_colors) / (max_colors - min_colors)
+        normalized_colors = (chunk_colors - min_colors) / (
+            max_colors - min_colors
+        )
         chunk_opacities = opacities[splat_idxs]
         chunk_opacities = 1 / (1 + torch.exp(-chunk_opacities))
         chunk_opacities = chunk_opacities.unsqueeze(-1)
-        normalized_colors_i = torch.cat([normalized_colors, chunk_opacities], dim=-1)
+        normalized_colors_i = torch.cat(
+            [normalized_colors, chunk_opacities], dim=-1
+        )
         color_i = pack_8888(
             normalized_colors_i[:, 0],
             normalized_colors_i[:, 1],
             normalized_colors_i[:, 2],
             normalized_colors_i[:, 3],
         )
-        splat_data_chunk = torch.stack([means_i, quat_i, scales_i, color_i], dim=1)
+        splat_data_chunk = torch.stack(
+            [means_i, quat_i, scales_i, color_i], dim=1
+        )
         splat_data_chunk = splat_data_chunk.ravel().to(torch.int64)
         splat_data.extend([splat_data_chunk])
 
         # Quantized spherical harmonics
         shN_chunk = shN[splat_idxs]
         shN_chunk_quantized = (shN_chunk / 8 + 0.5) * 256
-        shN_chunk_quantized = torch.clamp(torch.trunc(shN_chunk_quantized), 0, 255)
+        shN_chunk_quantized = torch.clamp(
+            torch.trunc(shN_chunk_quantized), 0, 255
+        )
         shN_chunk_quantized = shN_chunk_quantized.to(torch.uint8)
         sh_data.extend([shN_chunk_quantized.ravel()])
 
@@ -363,10 +380,20 @@ def splat2ply_bytes_compressed(
     uint8_dtype = np.dtype(np.uint8)
 
     buffer.write(
-        torch.cat(chunk_data).detach().cpu().numpy().astype(float_dtype).tobytes()
+        torch.cat(chunk_data)
+        .detach()
+        .cpu()
+        .numpy()
+        .astype(float_dtype)
+        .tobytes()
     )
     buffer.write(
-        torch.cat(splat_data).detach().cpu().numpy().astype(uint32_dtype).tobytes()
+        torch.cat(splat_data)
+        .detach()
+        .cpu()
+        .numpy()
+        .astype(uint32_dtype)
+        .tobytes()
     )
     buffer.write(
         torch.cat(sh_data).detach().cpu().numpy().astype(uint8_dtype).tobytes()
@@ -427,7 +454,9 @@ def splat2ply_bytes(
 
     # Write binary data
     float_dtype = np.dtype(np.float32).newbyteorder("<")
-    buffer.write(splat_data.detach().cpu().numpy().astype(float_dtype).tobytes())
+    buffer.write(
+        splat_data.detach().cpu().numpy().astype(float_dtype).tobytes()
+    )
 
     return buffer.getvalue()
 
@@ -455,7 +484,9 @@ def splat2splat_bytes(
     # Preprocess
     scales = torch.exp(scales)
     sh0_color = sh2rgb(sh0)
-    colors = torch.cat([sh0_color, torch.sigmoid(opacities).unsqueeze(-1)], dim=1)
+    colors = torch.cat(
+        [sh0_color, torch.sigmoid(opacities).unsqueeze(-1)], dim=1
+    )
     colors = (colors * 255).clamp(0, 255).to(torch.uint8)
 
     rots = (quats / torch.linalg.norm(quats, dim=1, keepdim=True)) * 128 + 128
@@ -516,7 +547,9 @@ def export_splats(
     total_splats = means.shape[0]
     assert means.shape == (total_splats, 3), "Means must be of shape (N, 3)"
     assert scales.shape == (total_splats, 3), "Scales must be of shape (N, 3)"
-    assert quats.shape == (total_splats, 4), "Quaternions must be of shape (N, 4)"
+    assert quats.shape == (total_splats, 4), (
+        "Quaternions must be of shape (N, 4)"
+    )
     assert opacities.shape == (total_splats,), "Opacities must be of shape (N,)"
     assert sh0.shape == (total_splats, 1, 3), "sh0 must be of shape (N, 1, 3)"
     assert (
@@ -557,7 +590,9 @@ def export_splats(
     elif format == "splat":
         data = splat2splat_bytes(means, scales, quats, opacities, sh0)
     elif format == "ply_compressed":
-        data = splat2ply_bytes_compressed(means, scales, quats, opacities, sh0, shN)
+        data = splat2ply_bytes_compressed(
+            means, scales, quats, opacities, sh0, shN
+        )
     else:
         raise ValueError(f"Unsupported format: {format}")
 

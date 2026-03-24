@@ -36,14 +36,12 @@ class GsplatRenderTabState(RenderTabState):
     radius_clip: float = 0.0
     eps2d: float = 0.3
     backgrounds: Tuple[float, float, float] = (0.0, 0.0, 0.0)
-    render_mode: Literal[
-        "rgb", "depth(accumulated)", "depth(expected)", "alpha"
-    ] = "rgb"
+    render_mode: Literal["rgb", "depth(accumulated)", "depth(expected)", "alpha"] = "rgb"
     normalize_nearfar: bool = False
     inverse: bool = False
-    colormap: Literal[
-        "turbo", "viridis", "magma", "inferno", "cividis", "gray"
-    ] = "turbo"
+    colormap: Literal["turbo", "viridis", "magma", "inferno", "cividis", "gray"] = (
+        "turbo"
+    )
     rasterize_mode: RasterizeMode = "classic"
     camera_model: CameraModel = "pinhole"
 
@@ -96,9 +94,7 @@ class GsplatViewer(Viewer):
 
                 @max_sh_degree_number.on_update
                 def _(_) -> None:
-                    self.render_tab_state.max_sh_degree = int(
-                        max_sh_degree_number.value
-                    )
+                    self.render_tab_state.max_sh_degree = int(max_sh_degree_number.value)
                     self.rerender(_)
 
                 near_far_plane_vec2 = server.gui.add_vector2(

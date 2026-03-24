@@ -231,9 +231,7 @@ def build_and_load_gsplat():
                 f"[bold yellow]gsplat: rebuilding due to error loading saved build parameters: {e}"
             )
         else:
-            print(
-                f"gsplat: rebuilding due to error loading saved build parameters: {e}"
-            )
+            print(f"gsplat: rebuilding due to error loading saved build parameters: {e}")
 
     # If parameters have changed,
     if build_params_changed:
@@ -243,7 +241,7 @@ def build_and_load_gsplat():
         if saved_build_params is not None:
             if _console is not None:
                 _console.print(
-                    f"[bold yellow]gsplat: rebuilding due to build parameter change"
+                    "[bold yellow]gsplat: rebuilding due to build parameter change"
                 )
             else:
                 print("gsplat: rebuilding due to build parameter change")

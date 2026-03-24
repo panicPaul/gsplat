@@ -982,9 +982,9 @@ def gaussian_param(lidar_param, gauss_start_pos, gauss_end_pos):
     if gaussian_start_az_pix > gaussian_end_az_pix:
         radius_az_pix = full_circle_pix / 2 - radius_az_pix
 
-    assert ("exact" not in gauss_start_pos) or (
-        "exact" not in gauss_end_pos
-    ), "Both boundaries can't be exact"
+    assert ("exact" not in gauss_start_pos) or ("exact" not in gauss_end_pos), (
+        "Both boundaries can't be exact"
+    )
 
     # If either gaussian extremity is exactly positioned (i.e. pinned)
     if "exact" in gauss_start_pos or "exact" in gauss_end_pos:
@@ -1926,9 +1926,9 @@ def test_isect_lidar_corner_cases(
     gauss_min_rel_pix = abs_to_rel_az(gauss_mean_pix - gauss_radius_pix)
     gauss_max_rel_pix = abs_to_rel_az(gauss_mean_pix + gauss_radius_pix)
 
-    assert (
-        observed_tiles == expected_tiles
-    ), f"Expected tiles={expected_tiles}, got tiles={observed_tiles} -> gaussian:[{gauss_min_rel_pix};{gauss_radius_pix}@{gauss_mean_rel_pix}:{gauss_max_rel_pix}), hfov-span:{hfov_span_pix}"
+    assert observed_tiles == expected_tiles, (
+        f"Expected tiles={expected_tiles}, got tiles={observed_tiles} -> gaussian:[{gauss_min_rel_pix};{gauss_radius_pix}@{gauss_mean_rel_pix}:{gauss_max_rel_pix}), hfov-span:{hfov_span_pix}"
+    )
 
     if expected_tiles > 0:
         assert isect_ids.numel() == observed_tiles
@@ -2084,9 +2084,7 @@ def _expected_hit_distance_canonical_ray_distance(
         .squeeze(-1)
         .squeeze(0)
     )
-    grd = (
-        torch.matmul(iscl_rot, ray_d.unsqueeze(0).unsqueeze(-1)).squeeze(-1).squeeze(0)
-    )
+    grd = torch.matmul(iscl_rot, ray_d.unsqueeze(0).unsqueeze(-1)).squeeze(-1).squeeze(0)
     grd = _safe_normalize(grd)
     hit_t = (grd * (-gro)).sum().item()
     grds = scales.squeeze(0) * grd * hit_t
@@ -2607,27 +2605,25 @@ def test_rasterize_to_pixels_eval3d(
 
     # Compare normals if computed
     if return_normals:
-        assert (
-            render_normals is not None
-        ), "CUDA render_normals should not be None when return_normals=True"
-        assert (
-            _render_normals is not None
-        ), "PyTorch render_normals should not be None when return_normals=True"
+        assert render_normals is not None, (
+            "CUDA render_normals should not be None when return_normals=True"
+        )
+        assert _render_normals is not None, (
+            "PyTorch render_normals should not be None when return_normals=True"
+        )
 
         # With the default tolerances, the error is quite small:
         # Greatest absolute difference: 5.447864532470703e-05 at index (2, 11, 16, 2) (up to 1e-05 allowed)
         # Greatest relative difference: 0.00024596037110313773 at index (0, 27, 39, 1) (up to 1.3e-06 allowed)
         # Setting tolerances small enough to ignore these errors.
-        torch.testing.assert_close(
-            render_normals, _render_normals, rtol=3e-4, atol=6e-5
-        )
+        torch.testing.assert_close(render_normals, _render_normals, rtol=3e-4, atol=6e-5)
     else:
-        assert (
-            render_normals is None
-        ), "CUDA render_normals should be None when return_normals=False"
-        assert (
-            _render_normals is None
-        ), "PyTorch render_normals should be None when return_normals=False"
+        assert render_normals is None, (
+            "CUDA render_normals should be None when return_normals=False"
+        )
+        assert _render_normals is None, (
+            "PyTorch render_normals should be None when return_normals=False"
+        )
 
     # Test the gradients now
 
