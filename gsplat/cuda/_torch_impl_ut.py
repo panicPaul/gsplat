@@ -323,11 +323,11 @@ def _fully_fused_projection_with_ut(
     radius_clip: float = 0.0,
     calc_compensations: bool = False,
     camera_model: CameraModel = "pinhole",
-    ut_params: UnscentedTransformParameters | None = None,
+    ut_params: "UnscentedTransformParameters | None" = None,
     radial_coeffs: Tensor | None = None,
     tangential_coeffs: Tensor | None = None,
     thin_prism_coeffs: Tensor | None = None,
-    ftheta_coeffs: FThetaCameraDistortionParameters | None = None,
+    ftheta_coeffs: "FThetaCameraDistortionParameters | None" = None,
     lidar_coeffs: RowOffsetStructuredSpinningLidarModelParametersExt
     | None = None,
     rolling_shutter: RollingShutterType = RollingShutterType.GLOBAL,

@@ -28,7 +28,7 @@ from gsplat.distributed import cli
 from gsplat.rendering import rasterization_2dgs
 from nerfview import CameraState, RenderTabState, apply_float_colormap
 
-from gsplat_viewer_2dgs import GsplatRenderTabState, GsplatViewer
+from examples.gsplat_viewer_2dgs import GsplatRenderTabState, GsplatViewer
 
 
 def main(

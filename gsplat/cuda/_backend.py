@@ -16,54 +16,56 @@
 
 """CUDA backend loader for gsplat.
 
-Trigger compiling (for debugging)::
+This module intentionally does not JIT-compile the extension. The gsplat CUDA
+backend must be built explicitly, for example with:
 
-    VERBOSE=1 DEBUG=1 TORCH_CUDA_ARCH_LIST="8.9" python -c "from gsplat.cuda._backend import _C"
+    pixi run python setup.py build_ext --inplace
 """
 
+import os
 from pathlib import Path
-from subprocess import DEVNULL, call
 
-import torch.utils.cpp_extension as jit
-from rich.console import Console
+_IMPORT_ERROR_MESSAGE = """
+gsplat CUDA extension is not available.
 
-from .build import build_and_load_gsplat
+Build the extension explicitly before importing CUDA-backed functionality:
 
+    pixi run python setup.py build_ext --inplace
 
-def cuda_toolkit_available() -> bool:
-    """Check more robustly if the CUDA toolkit is available.
+If you need camera/custom-class support, build with:
 
-    1. Attempt to locate `CUDA_HOME` using PyTorch's internal method.
-    2. Check if nvcc is present in that location.
-    """
-    cuda_home = jit._find_cuda_home()  # This tries various heuristics
-    if not cuda_home:
-        return False
-
-    # If we have a cuda_home, check if nvcc exists there:
-    nvcc_path = Path(cuda_home) / "bin" / "nvcc"
-    if not nvcc_path.is_file():
-        # Maybe still on PATH, try calling "nvcc" directly:
-        try:
-            call(["nvcc"], stdout=DEVNULL, stderr=DEVNULL)
-            return True
-        except FileNotFoundError:
-            return False
-    return True
+    BUILD_CAMERA_WRAPPERS=1 pixi run python setup.py build_ext --inplace
+""".strip()
 
 
-_C = None
+def _ensure_cuda_include_env() -> None:
+    """Expose Pixi/conda CUDA headers to third-party JIT extensions."""
+    conda_prefix = os.environ.get("CONDA_PREFIX")
+    if not conda_prefix:
+        return
+
+    include_dir = Path(conda_prefix) / "targets" / "x86_64-linux" / "include"
+    if not include_dir.exists():
+        return
+
+    include_dir_str = str(include_dir)
+    for env_name in ("CPATH", "C_INCLUDE_PATH", "CPLUS_INCLUDE_PATH"):
+        current = os.environ.get(env_name)
+        if not current:
+            os.environ[env_name] = include_dir_str
+            continue
+        paths = current.split(os.pathsep)
+        if include_dir_str not in paths:
+            os.environ[env_name] = os.pathsep.join([include_dir_str, *paths])
+
+
+_ensure_cuda_include_env()
 
 try:
-    # Try to import the compiled module (via setup.py or pre-built .so)
     from gsplat import csrc as _C
-except ImportError:
-    # if that fails, try with JIT compilation
-    if cuda_toolkit_available():
-        _C = build_and_load_gsplat()
-    else:
-        Console().print(
-            "[yellow]gsplat: No CUDA toolkit found. gsplat will be disabled.[/yellow]"
-        )
+except (
+    ImportError
+) as e:  # pragma: no cover - exercised via import failure paths
+    raise ImportError(_IMPORT_ERROR_MESSAGE) from e
 
 __all__ = ["_C"]

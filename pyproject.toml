@@ -152,7 +152,7 @@ python = ">=3.10,<3.14" # cupy does not support 3.14 yet
 
 [tool.ruff]
 line-length = 80  # Must match above
-src = ["gsplat", "examples"] # Stop ruff from assuming any root directory is a python module
+src = ["gsplat", "examples", "gsplat_training_utils"] # Stop ruff from assuming any root directory is a python module
 
 
 [tool.ruff.lint] # Mostly just copied over from mojo

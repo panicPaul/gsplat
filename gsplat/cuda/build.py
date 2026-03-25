@@ -63,9 +63,7 @@ BUILD_3DGS = os.getenv("BUILD_3DGS")
 BUILD_2DGS = os.getenv("BUILD_2DGS")
 BUILD_ADAM = os.getenv("BUILD_ADAM")
 BUILD_RELOC = os.getenv("BUILD_RELOC")
-BUILD_CAMERA_WRAPPERS = (
-    os.getenv("BUILD_CAMERA_WRAPPERS", "1" if DEBUG else "0") == "1"
-)
+BUILD_CAMERA_WRAPPERS = os.getenv("BUILD_CAMERA_WRAPPERS", "1") == "1"
 
 NUM_CHANNELS = os.getenv("NUM_CHANNELS")
 

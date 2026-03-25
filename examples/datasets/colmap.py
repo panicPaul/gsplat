@@ -25,11 +25,11 @@ import imageio.v2 as imageio
 import numpy as np
 import pycolmap
 import torch
+from examples.exif import compute_exposure_from_exif
 from PIL import Image
 from tqdm import tqdm
 
-from exif import compute_exposure_from_exif
-from utils import get_numpy_rng
+from examples.utils import get_numpy_rng
 
 from .normalize import (
     align_principal_axes,
@@ -144,20 +144,34 @@ class Parser:
                 params = np.empty(0, dtype=np.float32)
                 camtype = "perspective"
             elif type_ == "SIMPLE_RADIAL":
-                params = np.array([cam_params[3], 0.0, 0.0, 0.0], dtype=np.float32)
+                params = np.array(
+                    [cam_params[3], 0.0, 0.0, 0.0], dtype=np.float32
+                )
                 camtype = "perspective"
             elif type_ == "RADIAL":
-                params = np.array([cam_params[3], cam_params[4], 0.0, 0.0], dtype=np.float32)
+                params = np.array(
+                    [cam_params[3], cam_params[4], 0.0, 0.0], dtype=np.float32
+                )
                 camtype = "perspective"
             elif type_ == "OPENCV":
                 params = np.array(
-                    [cam_params[4], cam_params[5], cam_params[6], cam_params[7]],
+                    [
+                        cam_params[4],
+                        cam_params[5],
+                        cam_params[6],
+                        cam_params[7],
+                    ],
                     dtype=np.float32,
                 )
                 camtype = "perspective"
             elif type_ == "OPENCV_FISHEYE":
                 params = np.array(
-                    [cam_params[4], cam_params[5], cam_params[6], cam_params[7]],
+                    [
+                        cam_params[4],
+                        cam_params[5],
+                        cam_params[6],
+                        cam_params[7],
+                    ],
                     dtype=np.float32,
                 )
                 camtype = "fisheye"
@@ -262,7 +276,10 @@ class Parser:
             image_id: im.name for image_id, im in images.items()
         }
         for point_id, point3d in points3d.items():
-            for track_el in point3d.track.elements():
+            track_elements = point3d.track.elements
+            if callable(track_elements):
+                track_elements = track_elements()
+            for track_el in track_elements:
                 image_name = image_id_to_name[track_el.image_id]
                 point_idx = point3d_id_to_point3d_idx[point_id]
                 point_indices.setdefault(image_name, []).append(point_idx)

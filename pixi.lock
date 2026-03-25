@@ -3308,7 +3308,7 @@ packages:
 - pypi: ./
   name: gsplat
   version: 1.5.3
-  sha256: 23b279a499f50fa1a7c6fd5e4f76171ba2397b7530dca95b450dd253470a4176
+  sha256: b5101a9dd75a02eba7420ff27dd4b721264e6a1847e3b76437200ed29046b935
   requires_dist:
   - torch>=2.11.0
   - ninja>=1.13.0,<2
@@ -3332,7 +3332,7 @@ packages:
 - pypi: ./examples
   name: gsplat-examples
   version: 0.1.0
-  sha256: ae4da5576d38163cf9557ed31000e67a6ddcaafa8c4f499d43c79eaef1f6ffb3
+  sha256: 2f7d3ab15817ceb1cf254be79ab94e8ddbd425de079b7ad30708babf855c6251
   requires_dist:
   - viser>=1.0.24
   - imageio[ffmpeg]>=2.37.3
@@ -3354,6 +3354,7 @@ packages:
   - fused-ssim @ git+https://github.com/rahul-goel/fused-ssim
   - fused-bilagrid @ git+https://github.com/harry7557558/fused-bilagrid
   - ppisp @ git+https://github.com/nv-tlabs/ppisp
+  - piexif
   requires_python: '>=3.11'
 - conda: https://conda.anaconda.org/conda-forge/linux-64/gxx_impl_linux-64-13.4.0-h6a38259_18.conda
   sha256: 95676e274926fe9081205661db1a87169d9cf487bdb17072a63c1d907dfe7f8f

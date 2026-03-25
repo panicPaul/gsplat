@@ -21,6 +21,8 @@ pytest <THIS_PY_FILE> -s
 ```
 """
 
+import importlib.util
+
 import pytest
 import torch
 
@@ -28,6 +30,10 @@ device = torch.device("cuda:0")
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="No CUDA device")
+@pytest.mark.skipif(
+    importlib.util.find_spec("plas") is None,
+    reason="PLAS is not installed",
+)
 def test_png_compression():
     from gsplat.compression import PngCompression
 

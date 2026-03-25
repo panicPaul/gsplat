@@ -305,7 +305,7 @@ def rasterization(
     radial_coeffs: Tensor | None = None,  # [..., C, 6] or [..., C, 4]
     tangential_coeffs: Tensor | None = None,  # [..., C, 2]
     thin_prism_coeffs: Tensor | None = None,  # [..., C, 4]
-    ftheta_coeffs: FThetaCameraDistortionParameters | None = None,
+    ftheta_coeffs: "FThetaCameraDistortionParameters | None" = None,
     lidar_coeffs: RowOffsetStructuredSpinningLidarModelParametersExt
     | None = None,
     external_distortion_coeffs: BivariateWindshieldModelParameters
@@ -314,7 +314,7 @@ def rasterization(
     rolling_shutter: RollingShutterType = RollingShutterType.GLOBAL,
     viewmats_rs: Tensor | None = None,  # [..., C, 4, 4]
     # unscented transform (for 3DGUT)
-    ut_params: UnscentedTransformParameters | None = None,
+    ut_params: "UnscentedTransformParameters | None" = None,
     # extra signal channels (order in output: RGB, depth, extra)
     extra_signals: Tensor
     | None = None,  # [..., (C,) N, E] or [..., (C,) N, K, 3] when extra_signals_sh_degree set

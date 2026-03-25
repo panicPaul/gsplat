@@ -1,3 +1,6 @@
+train.sh
+output
+
 .clangd
 compile_commands.json
 .pixi

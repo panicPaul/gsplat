@@ -51,7 +51,6 @@ from gsplat.cuda._wrapper import (
     RollingShutterType,
     UnscentedTransformParameters,
     create_camera_model,
-    has_camera_wrappers,
 )
 from tests.test_cameras import parse_lidar_camera
 
@@ -101,7 +100,6 @@ def test_data():
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="No CUDA device")
-@pytest.mark.skipif(not gsplat.has_3dgs(), reason="3DGS support isn't built in")
 @pytest.mark.parametrize("triu", [False, True])
 @pytest.mark.parametrize("batch_dims", [(), (2,), (1, 2)])
 def test_quat_scale_to_covar_preci(
@@ -145,7 +143,6 @@ def test_quat_scale_to_covar_preci(
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="No CUDA device")
-@pytest.mark.skipif(not gsplat.has_3dgs(), reason="3DGS support isn't built in")
 @pytest.mark.parametrize("camera_model", ["pinhole", "ortho", "fisheye"])
 @pytest.mark.parametrize("batch_dims", [(), (2,), (1, 2)])
 def test_proj(
@@ -206,7 +203,6 @@ def test_proj(
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="No CUDA device")
-@pytest.mark.skipif(not gsplat.has_3dgs(), reason="3DGS support isn't built in")
 @pytest.mark.parametrize("camera_model", ["pinhole", "ortho", "fisheye"])
 @pytest.mark.parametrize("fused", [False, True])
 @pytest.mark.parametrize("calc_compensations", [True, False])
@@ -340,7 +336,6 @@ def test_projection(
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="No CUDA device")
-@pytest.mark.skipif(not gsplat.has_3dgs(), reason="3DGS support isn't built in")
 @pytest.mark.parametrize("fused", [False, True])
 @pytest.mark.parametrize("sparse_grad", [False])
 @pytest.mark.parametrize("calc_compensations", [False, True])
@@ -538,9 +533,6 @@ def test_fully_fused_projection_packed(
 @pytest.mark.skipif(
     not torch.cuda.is_available(), reason="CUDA required for UT projection"
 )
-@pytest.mark.skipif(
-    not gsplat.has_3dgut(), reason="3DGUT support isn't built in"
-)
 @pytest.mark.parametrize("batch_dims", [(), (2,), (1, 2)])
 @pytest.mark.parametrize(
     "require_all_valid", [True, False], ids=["allvalid", "somevalid"]
@@ -731,9 +723,6 @@ def test_fully_fused_projection_ut(
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="No CUDA device")
-@pytest.mark.skipif(
-    not gsplat.has_3dgut(), reason="3DGUT/Lidar support isn't built in"
-)
 @pytest.mark.parametrize("batch_dims", [(), (2,), (1, 2)])
 def test_isect(test_data, batch_dims: tuple[int, ...]):
     from gsplat.cuda._torch_impl import _isect_offset_encode, _isect_tiles
@@ -781,9 +770,6 @@ def test_isect(test_data, batch_dims: tuple[int, ...]):
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="No CUDA device")
-@pytest.mark.skipif(
-    not gsplat.has_3dgut(), reason="3DGUT/Lidar support isn't built in"
-)
 @pytest.mark.parametrize("batch_dims", [(), (2,), (1, 2)])
 @pytest.mark.parametrize("lidar_model", ["pandar128", "at128"])
 def test_isect_lidar(lidar_model, batch_dims: tuple[int, ...]):
@@ -2089,7 +2075,6 @@ def test_isect_lidar_corner_cases(
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="No CUDA device")
-@pytest.mark.skipif(not gsplat.has_3dgs(), reason="3DGS support isn't built in")
 @pytest.mark.parametrize("channels", [3, 32, 128])
 @pytest.mark.parametrize("batch_dims", [(), (2,), (1, 2)])
 def test_rasterize_to_pixels(
@@ -2272,9 +2257,6 @@ def _pixel_ray_dir_pinhole(
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="No CUDA device")
-@pytest.mark.skipif(
-    not gsplat.has_3dgut(), reason="3DGUT support isn't built in"
-)
 @pytest.mark.parametrize(
     "means_list,quats_choice,scales_list,pixel_dx,pixel_dy",
     [
@@ -2439,22 +2421,10 @@ def test_rasterize_to_pixels_hit_distance_principal_axis(
 # Since we have comprehensive camera model tests, we don't need to add
 # a camera model axis to this test. We use perfect pinhole model instead.
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="No CUDA device")
-@pytest.mark.skipif(
-    not gsplat.has_3dgut(), reason="3DGUT support isn't built in"
-)
 @pytest.mark.parametrize(
     "channels,batch_dims,rs_type,use_hit_distance,use_rays,return_normals",
     [
-        pytest.param(
-            *params,
-            marks=[
-                # test based on use_rays (4)
-                pytest.mark.skipif(
-                    params[4] and not has_camera_wrappers(),
-                    reason="Camera wrapper support isn't built in",
-                )
-            ],
-        )
+        pytest.param(*params)
         for params in chain(
             # Main test combinations with return_normals=False
             product(
@@ -2577,7 +2547,7 @@ def test_rasterize_to_pixels_eval3d(
         rori, rdir, rvalid = camera.image_point_to_world_ray_shutter_pose(
             grid, pose_start, pose_end
         )
-        assert (not rvalid).sum() == 0
+        assert (~rvalid).sum() == 0
         rays = torch.cat([rori, rdir], -1)
         rays.reshape(*batch_shape, height, width, 6)
     else:

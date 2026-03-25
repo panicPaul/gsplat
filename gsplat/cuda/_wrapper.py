@@ -28,11 +28,37 @@ from gsplat.cuda._lidar import (
     FOV as FOVBase,
 )
 from gsplat.cuda._lidar import (
+    RowOffsetStructuredSpinningLidarModelParameters,
+)
+from gsplat.cuda._lidar import (
     RowOffsetStructuredSpinningLidarModelParametersExt as RowOffsetStructuredSpinningLidarModelParametersExtBase,
 )
 
 ExternalDistortionModelMeta = Literal["bivariate-windshield"]
 CameraModel = Literal["pinhole", "ortho", "fisheye", "ftheta", "lidar"]
+
+_CUSTOM_OPS_REGISTERED = False
+
+
+def _ensure_custom_ops_registered() -> None:
+    global _CUSTOM_OPS_REGISTERED
+    if _CUSTOM_OPS_REGISTERED:
+        return
+
+    # Load the backend first so any custom classes referenced by frontend
+    # custom-op schemas are registered before _custom_ops is imported.
+    from ._backend import _C
+
+    if _C is None:
+        raise RuntimeError(
+            "gsplat CUDA extension is not available (not built or failed to load). "
+            "Cannot register frontend custom ops."
+        )
+
+    # pylint: disable=import-outside-toplevel
+    from gsplat.cuda import _custom_ops as _custom_ops_module  # noqa: F401
+
+    _CUSTOM_OPS_REGISTERED = True
 
 
 def _make_lazy_cuda_func(name: str) -> Callable:
@@ -153,41 +179,6 @@ class BivariateWindshieldModelParameters:
         return cls._cuda_cls()
 
 
-def has_camera_wrappers() -> bool:
-
-    # PyTorch will throw a RuntimeError if the class is not registered
-    # but that's okay in this case because we're just checking if it exists
-    try:
-        return hasattr(torch.classes.gsplat, "BaseCameraModel")
-    except RuntimeError:
-        return False
-
-
-def has_2dgs() -> bool:
-
-    return hasattr(torch.ops.gsplat, "projection_2dgs_fused_fwd")
-
-
-def has_3dgs() -> bool:
-
-    return hasattr(torch.ops.gsplat, "projection_ewa_simple_fwd")
-
-
-def has_3dgut() -> bool:
-
-    return hasattr(torch.ops.gsplat, "projection_ut_3dgs_fused")
-
-
-def has_adam() -> bool:
-
-    return hasattr(torch.ops.gsplat, "adam")
-
-
-def has_reloc() -> bool:
-
-    return hasattr(torch.ops.gsplat, "relocation")
-
-
 def create_camera_model(  # noqa: ANN202
     camera_model: str,
     width: int | None = None,
@@ -197,7 +188,7 @@ def create_camera_model(  # noqa: ANN202
     radial_coeffs: Tensor | None = None,
     tangential_coeffs: Tensor | None = None,
     thin_prism_coeffs: Tensor | None = None,
-    ftheta_coeffs: FThetaCameraDistortionParameters | None = None,
+    ftheta_coeffs: "FThetaCameraDistortionParameters | None" = None,
     rs_type: RollingShutterType = RollingShutterType.GLOBAL,
     lidar_coeffs: Optional[
         "RowOffsetStructuredSpinningLidarModelParametersExt"
@@ -352,7 +343,8 @@ def spherical_harmonics(
     if masks is not None:
         assert masks.shape == batch_dims, masks.shape
         masks = masks.contiguous()
-    return _SphericalHarmonics.apply(
+    _ensure_custom_ops_registered()
+    return torch.ops.gsplat.spherical_harmonics(
         degrees_to_use, dirs.contiguous(), coeffs.contiguous(), masks
     )
 
@@ -386,7 +378,8 @@ def quat_scale_to_covar_preci(
     assert scales.shape == batch_dims + (3,), scales.shape
     quats = quats.contiguous()
     scales = scales.contiguous()
-    covars, precis = _QuatScaleToCovarPreci.apply(
+    _ensure_custom_ops_registered()
+    covars, precis = torch.ops.gsplat.quat_scale_to_covar_preci(
         quats, scales, compute_covar, compute_preci, triu
     )
     return covars if compute_covar else None, precis if compute_preci else None
@@ -460,7 +453,8 @@ def proj(
     means = means.contiguous()
     covars = covars.contiguous()
     Ks = Ks.contiguous()
-    return _Proj.apply(means, covars, Ks, width, height, camera_model)
+    _ensure_custom_ops_registered()
+    return torch.ops.gsplat.proj(means, covars, Ks, width, height, camera_model)
 
 
 def fully_fused_projection(
@@ -580,8 +574,9 @@ def fully_fused_projection(
 
     viewmats = viewmats.contiguous()
     Ks = Ks.contiguous()
+    _ensure_custom_ops_registered()
     if packed:
-        return _FullyFusedProjectionPacked.apply(
+        return torch.ops.gsplat.fully_fused_projection_packed(
             means,
             covars,
             quats,
@@ -599,7 +594,7 @@ def fully_fused_projection(
             camera_model,
             opacities,
         )
-    return _FullyFusedProjection.apply(
+    return torch.ops.gsplat.fully_fused_projection(
         means,
         covars,
         quats,
@@ -913,19 +908,22 @@ def rasterize_to_pixels(
         f"Assert Failed: {tile_width} * {tile_size} >= {image_width}"
     )
 
-    render_colors, render_alphas = _RasterizeToPixels.apply(
-        means2d.contiguous(),
-        conics.contiguous(),
-        colors.contiguous(),
-        opacities.contiguous(),
-        backgrounds,
-        masks,
-        image_width,
-        image_height,
-        tile_size,
-        isect_offsets.contiguous(),
-        flatten_ids.contiguous(),
-        absgrad,
+    _ensure_custom_ops_registered()
+    render_colors, render_alphas, _raw_render_alphas, _last_ids = (
+        torch.ops.gsplat.rasterize_to_pixels_extra(
+            means2d.contiguous(),
+            conics.contiguous(),
+            colors.contiguous(),
+            opacities.contiguous(),
+            backgrounds,
+            masks,
+            image_width,
+            image_height,
+            tile_size,
+            isect_offsets.contiguous(),
+            flatten_ids.contiguous(),
+            absgrad,
+        )
     )
 
     if padded_channels > 0:
@@ -949,13 +947,13 @@ def rasterize_to_pixels_eval3d(
     backgrounds: Tensor | None = None,  # [..., C, channels]
     masks: Tensor | None = None,  # [..., C, tile_height, tile_width]
     camera_model: CameraModel = "pinhole",
-    ut_params: UnscentedTransformParameters | None = None,
+    ut_params: "UnscentedTransformParameters | None" = None,
     rays: Tensor | None = None,  # [..., C, H, W, 6]
     # distortion
     radial_coeffs: Tensor | None = None,  # [..., C, 6] or [..., C, 4]
     tangential_coeffs: Tensor | None = None,  # [..., C, 2]
     thin_prism_coeffs: Tensor | None = None,  # [..., C, 4]
-    ftheta_coeffs: FThetaCameraDistortionParameters | None = None,
+    ftheta_coeffs: "FThetaCameraDistortionParameters | None" = None,
     lidar_coeffs: RowOffsetStructuredSpinningLidarModelParametersExt
     | None = None,
     external_distortion_coeffs: BivariateWindshieldModelParameters
@@ -1030,13 +1028,13 @@ def rasterize_to_pixels_eval3d_extra(
     backgrounds: Tensor | None = None,  # [..., C, channels]
     masks: Tensor | None = None,  # [..., C, tile_height, tile_width]
     camera_model: CameraModel = "pinhole",
-    ut_params: UnscentedTransformParameters | None = None,
+    ut_params: "UnscentedTransformParameters | None" = None,
     rays: Tensor | None = None,  # [..., C, P, 6]
     # distortion
     radial_coeffs: Tensor | None = None,  # [..., C, 6] or [..., C, 4]
     tangential_coeffs: Tensor | None = None,  # [..., C, 2]
     thin_prism_coeffs: Tensor | None = None,  # [..., C, 4]
-    ftheta_coeffs: FThetaCameraDistortionParameters | None = None,
+    ftheta_coeffs: "FThetaCameraDistortionParameters | None" = None,
     lidar_coeffs: RowOffsetStructuredSpinningLidarModelParametersExt
     | None = None,
     external_distortion_coeffs: BivariateWindshieldModelParameters
@@ -1226,13 +1224,17 @@ def rasterize_to_pixels_eval3d_extra(
             f"Assert Failed: {tile_width} * {tile_size} >= {image_width}"
         )
 
+    if ftheta_coeffs is None:
+        ftheta_coeffs = FThetaCameraDistortionParameters()
+
+    _ensure_custom_ops_registered()
     (
         render_colors,
         render_alphas,
         last_ids,
         sample_counts,
         render_normals,
-    ) = _RasterizeToPixelsEval3D.apply(
+    ) = torch.ops.gsplat.rasterize_to_pixels_eval3d_extra(
         means.contiguous(),
         quats.contiguous(),
         scales.contiguous(),
@@ -1259,7 +1261,7 @@ def rasterize_to_pixels_eval3d_extra(
         if thin_prism_coeffs is not None
         else None,
         ftheta_coeffs,
-        lidar_coeffs,
+        lidar_coeffs.to_cpp() if lidar_coeffs is not None else None,
         external_distortion_coeffs,
         # rolling shutter
         rolling_shutter,
@@ -1648,12 +1650,12 @@ def fully_fused_projection_with_ut(
     radius_clip: float = 0.0,
     calc_compensations: bool = False,
     camera_model: CameraModel = "pinhole",
-    ut_params: UnscentedTransformParameters | None = None,
+    ut_params: "UnscentedTransformParameters | None" = None,
     # distortion
     radial_coeffs: Tensor | None = None,  # [..., C, 6] or [..., C, 4]
     tangential_coeffs: Tensor | None = None,  # [..., C, 2]
     thin_prism_coeffs: Tensor | None = None,  # [..., C, 4]
-    ftheta_coeffs: FThetaCameraDistortionParameters | None = None,
+    ftheta_coeffs: "FThetaCameraDistortionParameters | None" = None,
     lidar_coeffs: RowOffsetStructuredSpinningLidarModelParametersExt
     | None = None,
     external_distortion_coeffs: BivariateWindshieldModelParameters
@@ -1732,46 +1734,44 @@ def fully_fused_projection_with_ut(
             lidar_coeffs, RowOffsetStructuredSpinningLidarModelParametersExt
         )
 
-    camera_model_type = _make_lazy_cuda_obj(
-        f"CameraModelType.{camera_model.upper()}"
-    )
     ftheta_coeffs = (
         ftheta_coeffs
         if ftheta_coeffs is not None
         else FThetaCameraDistortionParameters()
     )
 
-    radii, means2d, depths, conics, compensations = _make_lazy_cuda_func(
-        "projection_ut_3dgs_fused"
-    )(
-        means.contiguous(),
-        quats.contiguous(),
-        scales.contiguous(),
-        opacities.contiguous() if opacities is not None else None,
-        viewmats.contiguous(),
-        viewmats_rs.contiguous() if viewmats_rs is not None else None,
-        Ks.contiguous(),
-        width,
-        height,
-        eps2d,
-        near_plane,
-        far_plane,
-        radius_clip,
-        calc_compensations,
-        camera_model_type,
-        global_z_order,
-        ut_params,
-        rolling_shutter,
-        radial_coeffs.contiguous() if radial_coeffs is not None else None,
-        tangential_coeffs.contiguous()
-        if tangential_coeffs is not None
-        else None,
-        thin_prism_coeffs.contiguous()
-        if thin_prism_coeffs is not None
-        else None,
-        ftheta_coeffs,
-        lidar_coeffs.to_cpp() if lidar_coeffs is not None else None,
-        external_distortion_coeffs,
+    _ensure_custom_ops_registered()
+    radii, means2d, depths, conics, compensations = (
+        torch.ops.gsplat.fully_fused_projection_with_ut(
+            means.contiguous(),
+            quats.contiguous(),
+            scales.contiguous(),
+            opacities.contiguous() if opacities is not None else None,
+            viewmats.contiguous(),
+            Ks.contiguous(),
+            width,
+            height,
+            eps2d,
+            near_plane,
+            far_plane,
+            radius_clip,
+            calc_compensations,
+            camera_model,
+            ut_params,
+            radial_coeffs.contiguous() if radial_coeffs is not None else None,
+            tangential_coeffs.contiguous()
+            if tangential_coeffs is not None
+            else None,
+            thin_prism_coeffs.contiguous()
+            if thin_prism_coeffs is not None
+            else None,
+            ftheta_coeffs,
+            lidar_coeffs.to_cpp() if lidar_coeffs is not None else None,
+            external_distortion_coeffs,
+            rolling_shutter,
+            viewmats_rs.contiguous() if viewmats_rs is not None else None,
+            global_z_order,
+        )
     )
     if not calc_compensations:
         compensations = None
@@ -1929,13 +1929,13 @@ class _RasterizeToPixelsEval3D(torch.autograd.Function):
         isect_offsets: Tensor,  # [..., C, tile_height, tile_width]
         flatten_ids: Tensor,  # [..., n_isects]
         camera_model: CameraModel = "pinhole",
-        ut_params: UnscentedTransformParameters | None = None,
+        ut_params: "UnscentedTransformParameters | None" = None,
         rays: Tensor | None = None,  # [..., C, P, 6]
         # distortion
         radial_coeffs: Tensor | None = None,  # [..., C, 6] or [..., C, 4]
         tangential_coeffs: Tensor | None = None,  # [..., C, 2]
         thin_prism_coeffs: Tensor | None = None,  # [..., C, 4]
-        ftheta_coeffs: FThetaCameraDistortionParameters | None = None,
+        ftheta_coeffs: "FThetaCameraDistortionParameters | None" = None,
         lidar_coeffs: RowOffsetStructuredSpinningLidarModelParametersExt
         | None = None,
         external_distortion_coeffs: BivariateWindshieldModelParameters
@@ -2534,8 +2534,9 @@ def fully_fused_projection_2dgs(
 
     viewmats = viewmats.contiguous()
     Ks = Ks.contiguous()
+    _ensure_custom_ops_registered()
     if packed:
-        return _FullyFusedProjectionPacked2DGS.apply(
+        return torch.ops.gsplat.fully_fused_projection_packed_2dgs(
             means,
             quats,
             scales,
@@ -2548,7 +2549,7 @@ def fully_fused_projection_2dgs(
             radius_clip,
             sparse_grad,
         )
-    return _FullyFusedProjection2DGS.apply(
+    return torch.ops.gsplat.fully_fused_projection_2dgs(
         means,
         quats,
         scales,
@@ -2956,13 +2957,17 @@ def rasterize_to_pixels_2dgs(
         f"Assert Failed: {tile_width} * {tile_size} >= {image_width}"
     )
 
+    _ensure_custom_ops_registered()
     (
         render_colors,
         render_alphas,
         render_normals,
         render_distort,
         render_median,
-    ) = _RasterizeToPixels2DGS.apply(
+        _raw_render_alphas,
+        _last_ids,
+        _median_ids,
+    ) = torch.ops.gsplat.rasterize_to_pixels_2dgs_extra(
         means2d.contiguous(),
         ray_transforms.contiguous(),
         colors.contiguous(),

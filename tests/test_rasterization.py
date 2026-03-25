@@ -34,26 +34,11 @@ from tests.test_cameras import parse_lidar_camera
 device = torch.device("cuda:0")
 
 
-# Only 3dgs is being tested as per default args with_ut==False and with_eval3d==False
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="No CUDA device")
-@pytest.mark.skipif(not gsplat.has_3dgs(), reason="3DGS support isn't built in")
 @pytest.mark.parametrize(
     "per_view_color,sh_degree,render_mode,packed,batch_dims,with_eval3d,with_ut,camera_model,extra_signals_info",
     [
-        pytest.param(
-            *params,
-            marks=[
-                # test based on with_eval3d (5)  and with_ut (6)
-                pytest.mark.skipif(
-                    (params[5] or params[6]) and not gsplat.has_3dgut(),
-                    reason="3DGUT support isn't built in",
-                ),
-                pytest.mark.skipif(
-                    (not params[5] or not params[6]) and not gsplat.has_3dgs(),
-                    reason="3DGS support isn't built in",
-                ),
-            ],
-        )
+        pytest.param(*params)
         for params in
         # Standard tests: all combinations with with_eval3d=False
         chain(

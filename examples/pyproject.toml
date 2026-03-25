@@ -23,6 +23,7 @@ dependencies = [
     "fused-ssim",
     "fused-bilagrid",
     "ppisp==1.0.0",
+     "piexif",
 ]
 
 [tool.uv.sources]

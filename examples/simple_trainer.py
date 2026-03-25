@@ -51,14 +51,14 @@ from torchmetrics.image import (
 )
 from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
 
-from datasets.colmap import Dataset, Parser
-from datasets.traj import (
+from examples.datasets.colmap import Dataset, Parser
+from examples.datasets.traj import (
     generate_ellipse_path_z,
     generate_interpolated_path,
     generate_spiral_path,
 )
-from gsplat_viewer import GsplatRenderTabState, GsplatViewer
-from utils import (
+from examples.gsplat_viewer import GsplatRenderTabState, GsplatViewer
+from examples.utils import (
     AppearanceOptModule,
     CameraOptModule,
     knn,

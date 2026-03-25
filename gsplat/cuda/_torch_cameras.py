@@ -252,7 +252,7 @@ class _BaseCameraModel(ABC):
         radial_coeffs: Tensor | None = None,
         tangential_coeffs: Tensor | None = None,
         thin_prism_coeffs: Tensor | None = None,
-        ftheta_coeffs: FThetaCameraDistortionParameters | None = None,
+        ftheta_coeffs: "FThetaCameraDistortionParameters | None" = None,
         rs_type: RollingShutterType = RollingShutterType.GLOBAL,
         # Optional[RowOffsetStructuredSpinningLidarModelParameters]
         # Can't type it here to avoid circular import with _torch_lidars
