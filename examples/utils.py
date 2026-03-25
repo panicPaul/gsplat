@@ -25,6 +25,8 @@ from matplotlib import colormaps
 from sklearn.neighbors import NearestNeighbors
 from torch import Tensor
 
+_NUMPY_RNG = np.random.default_rng()
+
 
 class CameraOptModule(torch.nn.Module):
     """Camera pose optimization module."""
@@ -188,9 +190,16 @@ def rgb_to_sh(rgb: Tensor) -> Tensor:
 
 def set_random_seed(seed: int) -> None:
     """Seed Python, NumPy, and PyTorch random number generators."""
+    global _NUMPY_RNG
+
     random.seed(seed)
-    np.random.seed(seed)
+    _NUMPY_RNG = np.random.default_rng(seed)
     torch.manual_seed(seed)
+
+
+def get_numpy_rng() -> np.random.Generator:
+    """Return the shared NumPy random generator used by the examples."""
+    return _NUMPY_RNG
 
 
 # ref: https://github.com/hbb1/2d-gaussian-splatting/blob/main/utils/general_utils.py#L163

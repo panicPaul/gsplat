@@ -3308,31 +3308,7 @@ packages:
 - pypi: ./
   name: gsplat
   version: 1.5.3
-  sha256: 96a475ac89bdd3f290d891303fa9550cbf3a69b2b006a65ae3e2418ec51b09aa
-  requires_dist:
-  - torch>=2.11.0
-  - ninja>=1.13.0,<2
-  - numpy<2.0.0
-  - jaxtyping>=0.3.9,<0.4
-  - rich>=14.3.3,<15
-  - beartype>=0.22.9,<0.23
-  - scipy>=1.17.1,<2 ; extra == 'lidar'
-  - pyyaml>=6.0.3,<7 ; extra == 'dev'
-  - pytest>=9.0.2,<10 ; extra == 'dev'
-  - pytest-env>=1.6.0,<2 ; extra == 'dev'
-  - pytest-xdist>=3.8.0,<4 ; extra == 'dev'
-  - build>=1.4.0,<2 ; extra == 'dev'
-  - twine>=6.2.0,<7 ; extra == 'dev'
-  - nerfacc>=0.5.3,<0.6 ; extra == 'dev'
-  - ruff>=0.15.7,<0.16 ; extra == 'dev'
-  - imageio>=2.37.3,<3 ; extra == 'dev'
-  - torchpq>=0.3.0.6,<0.4 ; extra == 'dev'
-  - ty>=0.0.24,<0.0.25 ; extra == 'dev'
-  requires_python: '>=3.11'
-- pypi: ./
-  name: gsplat
-  version: 1.5.3
-  sha256: a9870d11e4d2fd6aec0ed83ed617c96b0c99f2ed9cc862d8a4e5606c93302d2b
+  sha256: 23b279a499f50fa1a7c6fd5e4f76171ba2397b7530dca95b450dd253470a4176
   requires_dist:
   - torch>=2.11.0
   - ninja>=1.13.0,<2

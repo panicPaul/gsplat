@@ -29,6 +29,7 @@ from pycolmap import SceneManager
 from tqdm import tqdm
 
 from exif import compute_exposure_from_exif
+from utils import get_numpy_rng
 
 from .normalize import (
     align_principal_axes,
@@ -481,8 +482,9 @@ class Dataset:
         if self.patch_size is not None:
             # Random crop.
             h, w = image.shape[:2]
-            x = np.random.randint(0, max(w - self.patch_size, 1))
-            y = np.random.randint(0, max(h - self.patch_size, 1))
+            rng = get_numpy_rng()
+            x = rng.integers(0, max(w - self.patch_size, 1))
+            y = rng.integers(0, max(h - self.patch_size, 1))
             image = image[y : y + self.patch_size, x : x + self.patch_size]
             K[0, 2] -= x
             K[1, 2] -= y
